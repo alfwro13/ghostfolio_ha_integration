@@ -8,6 +8,9 @@ CONF_ACCESS_TOKEN = "access_token"
 CONF_VERIFY_SSL = "verify_ssl"
 CONF_UPDATE_INTERVAL = "update_interval"
 CONF_PORTFOLIO_NAME = "portfolio_name"
+CONF_SHOW_TOTALS = "show_totals"
+CONF_SHOW_ACCOUNTS = "show_accounts"
+CONF_SHOW_HOLDINGS = "show_holdings"
 
 # Default values
 DEFAULT_NAME = "Ghostfolio"

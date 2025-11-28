@@ -36,7 +36,7 @@ class GhostfolioAPI:
 
         try:
             async with self._get_session().post(url, json=payload) as response:
-                if response.status in [200, 201]:  # Accept both 200 OK and 201 Created
+                if response.status in [200, 201]:
                     data = await response.json()
                     self.auth_token = data.get("authToken")
                     return self.auth_token
@@ -49,42 +49,62 @@ class GhostfolioAPI:
             _LOGGER.error("HTTP error during authentication: %s", err)
             raise GhostfolioAPIError(f"Connection error: {err}") from err
 
-    async def get_portfolio_performance(self, range_param: str = "max") -> dict[str, Any]:
-        """Get portfolio performance data."""
+    async def get_portfolio_performance(self, range_param: str = "max", account_id: str | None = None) -> dict[str, Any]:
+        """Get portfolio performance data, optionally filtered by account."""
+        params = {"range": range_param}
+        if account_id:
+            params["accounts"] = account_id
+
+        return await self._make_authenticated_request(
+            f"{self.base_url}/api/v2/portfolio/performance",
+            params=params
+        )
+
+    async def get_accounts(self) -> dict[str, Any]:
+        """Get list of all accounts."""
+        return await self._make_authenticated_request(
+            f"{self.base_url}/api/v1/account"
+        )
+
+    async def get_holdings(self, account_id: str | None = None) -> dict[str, Any]:
+        """Get holdings, optionally filtered by account."""
+        # This endpoint returns the current positions (holdings)
+        params = {}
+        if account_id:
+            params["accounts"] = account_id
+            
+        return await self._make_authenticated_request(
+            f"{self.base_url}/api/v1/portfolio/holdings",
+            params=params
+        )
+
+    async def _make_authenticated_request(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Helper to make authenticated requests with retry logic."""
         if not self.auth_token:
             await self.authenticate()
 
-        url = f"{self.base_url}/api/v2/portfolio/performance"
-        params = {"range": range_param}
         headers = {"Authorization": f"Bearer {self.auth_token}"}
 
         try:
             async with self._get_session().get(url, params=params, headers=headers) as response:
                 if response.status == 200:
-                    data = await response.json()
-                    _LOGGER.debug("Portfolio performance data retrieved successfully")
-                    return data
+                    return await response.json()
                 elif response.status == 401:
-                    # Token might be expired, try to re-authenticate
                     _LOGGER.info("Token expired, re-authenticating...")
                     await self.authenticate()
                     headers = {"Authorization": f"Bearer {self.auth_token}"}
                     
                     async with self._get_session().get(url, params=params, headers=headers) as retry_response:
                         if retry_response.status == 200:
-                            data = await retry_response.json()
-                            _LOGGER.debug("Portfolio performance data retrieved successfully after re-auth")
-                            return data
+                            return await retry_response.json()
                         else:
                             response_text = await retry_response.text()
-                            _LOGGER.error("Failed to get portfolio data after re-auth: %s", response_text)
-                            raise GhostfolioAPIError(f"API request failed: {retry_response.status}")
+                            raise GhostfolioAPIError(f"API request failed after re-auth: {retry_response.status}")
                 else:
                     response_text = await response.text()
-                    _LOGGER.error("Failed to get portfolio data: %s", response_text)
+                    _LOGGER.error("Failed to fetch data from %s: %s", url, response_text)
                     raise GhostfolioAPIError(f"API request failed: {response.status}")
         except aiohttp.ClientError as err:
-            _LOGGER.error("HTTP error during portfolio request: %s", err)
             raise GhostfolioAPIError(f"Connection error: {err}") from err
 
     def _get_session(self) -> aiohttp.ClientSession:

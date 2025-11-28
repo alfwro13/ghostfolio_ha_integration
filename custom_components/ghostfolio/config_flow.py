@@ -7,7 +7,6 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.selector import (
     BooleanSelector,
@@ -26,6 +25,9 @@ from .const import (
     CONF_PORTFOLIO_NAME,
     CONF_VERIFY_SSL, 
     CONF_UPDATE_INTERVAL,
+    CONF_SHOW_TOTALS,
+    CONF_SHOW_ACCOUNTS,
+    CONF_SHOW_HOLDINGS,   # <--- Imported
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN
 )
@@ -45,7 +47,6 @@ class GhostfolioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Test the connection
             api = GhostfolioAPI(
                 base_url=user_input[CONF_BASE_URL],
                 access_token=user_input[CONF_ACCESS_TOKEN],
@@ -53,13 +54,10 @@ class GhostfolioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
             try:
-                # Test authentication
                 auth_token = await api.authenticate()
                 if auth_token:
-                    # Test portfolio access
                     await api.get_portfolio_performance()
                     
-                    # Set unique ID based on base URL and portfolio name
                     portfolio_name = user_input.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
                     unique_id = f"{user_input[CONF_BASE_URL]}_{portfolio_name}".replace(" ", "_").lower()
                     await self.async_set_unique_id(unique_id)
@@ -80,26 +78,23 @@ class GhostfolioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_PORTFOLIO_NAME, default="Ghostfolio"): TextSelector(
-                        TextSelectorConfig(
-                            type=TextSelectorType.TEXT,
-                        )
+                        TextSelectorConfig(type=TextSelectorType.TEXT)
                     ),
                     vol.Required(CONF_BASE_URL): TextSelector(
-                        TextSelectorConfig(
-                            type=TextSelectorType.URL,
-                        )
+                        TextSelectorConfig(type=TextSelectorType.URL)
                     ),
                     vol.Required(CONF_ACCESS_TOKEN): TextSelector(
-                        TextSelectorConfig(
-                            type=TextSelectorType.PASSWORD,
-                        )
+                        TextSelectorConfig(type=TextSelectorType.PASSWORD)
                     ),
+                    vol.Optional(CONF_SHOW_TOTALS, default=True): BooleanSelector(),
+                    vol.Optional(CONF_SHOW_ACCOUNTS, default=True): BooleanSelector(),
+                    vol.Optional(CONF_SHOW_HOLDINGS, default=True): BooleanSelector(),  # <--- NEW CHECKBOX
                     vol.Optional(CONF_VERIFY_SSL, default=True): BooleanSelector(),
                     vol.Optional(CONF_UPDATE_INTERVAL, default=DEFAULT_UPDATE_INTERVAL): NumberSelector(
                         NumberSelectorConfig(
                             mode=NumberSelectorMode.BOX,
                             min=1,
-                            max=1440,  # Max 24 hours
+                            max=1440,
                             unit_of_measurement="minutes",
                         )
                     ),
@@ -116,7 +111,6 @@ class GhostfolioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Test the connection with new settings
             api = GhostfolioAPI(
                 base_url=user_input[CONF_BASE_URL],
                 access_token=user_input[CONF_ACCESS_TOKEN],
@@ -124,20 +118,15 @@ class GhostfolioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
             try:
-                # Test authentication
                 auth_token = await api.authenticate()
                 if auth_token:
-                    # Test portfolio access
                     await api.get_portfolio_performance()
                     
-                    # Set unique ID based on base URL and portfolio name to check for conflicts
                     portfolio_name = user_input.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
                     unique_id = f"{user_input[CONF_BASE_URL]}_{portfolio_name}".replace(" ", "_").lower()
                     await self.async_set_unique_id(unique_id)
-                    # Only abort if the unique ID belongs to a different entry
                     self._abort_if_unique_id_mismatch(reason="wrong_account")
 
-                    # Update the configuration entry
                     return self.async_update_reload_and_abort(
                         config_entry,
                         data_updates=user_input,
@@ -148,7 +137,6 @@ class GhostfolioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception during reconfiguration: %s", ex)
                 errors["base"] = "cannot_connect"
 
-        # Pre-fill the form with current values
         current_data = config_entry.data
         return self.async_show_form(
             step_id="reconfigure",
@@ -156,26 +144,23 @@ class GhostfolioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Schema(
                     {
                         vol.Required(CONF_PORTFOLIO_NAME, default="Ghostfolio"): TextSelector(
-                            TextSelectorConfig(
-                                type=TextSelectorType.TEXT,
-                            )
+                            TextSelectorConfig(type=TextSelectorType.TEXT)
                         ),
                         vol.Required(CONF_BASE_URL): TextSelector(
-                            TextSelectorConfig(
-                                type=TextSelectorType.URL,
-                            )
+                            TextSelectorConfig(type=TextSelectorType.URL)
                         ),
                         vol.Required(CONF_ACCESS_TOKEN): TextSelector(
-                            TextSelectorConfig(
-                                type=TextSelectorType.PASSWORD,
-                            )
+                            TextSelectorConfig(type=TextSelectorType.PASSWORD)
                         ),
+                        vol.Optional(CONF_SHOW_TOTALS, default=True): BooleanSelector(),
+                        vol.Optional(CONF_SHOW_ACCOUNTS, default=True): BooleanSelector(),
+                        vol.Optional(CONF_SHOW_HOLDINGS, default=True): BooleanSelector(), # <--- NEW CHECKBOX
                         vol.Optional(CONF_VERIFY_SSL, default=True): BooleanSelector(),
                         vol.Optional(CONF_UPDATE_INTERVAL, default=DEFAULT_UPDATE_INTERVAL): NumberSelector(
                             NumberSelectorConfig(
                                 mode=NumberSelectorMode.BOX,
                                 min=1,
-                                max=1440,  # Max 24 hours
+                                max=1440,
                                 unit_of_measurement="minutes",
                             )
                         ),

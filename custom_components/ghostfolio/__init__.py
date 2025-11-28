@@ -8,11 +8,16 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 
 from .api import GhostfolioAPI
-from .const import CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL, DOMAIN
+from .const import (
+    CONF_UPDATE_INTERVAL, 
+    DEFAULT_UPDATE_INTERVAL, 
+    CONF_SHOW_HOLDINGS, 
+    DOMAIN
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,7 +33,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     update_interval = entry.data.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
-    coordinator = GhostfolioDataUpdateCoordinator(hass, api, update_interval)
+    coordinator = GhostfolioDataUpdateCoordinator(hass, api, update_interval, entry)
+    
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = coordinator
@@ -43,12 +49,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
-
-
 class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching Ghostfolio data."""
 
-    def __init__(self, hass: HomeAssistant, api: GhostfolioAPI, update_interval_minutes: int) -> None:
+    def __init__(self, hass: HomeAssistant, api: GhostfolioAPI, update_interval_minutes: int, entry: ConfigEntry) -> None:
         """Initialize coordinator."""
         super().__init__(
             hass,
@@ -57,7 +61,54 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(minutes=update_interval_minutes),
         )
         self.api = api
+        self.entry = entry
 
     async def _async_update_data(self):
         """Fetch data from Ghostfolio API."""
-        return await self.api.get_portfolio_performance()
+        try:
+            # 1. Fetch List of Accounts
+            accounts_data = await self.api.get_accounts()
+            accounts_list = accounts_data.get("accounts", [])
+            
+            # 2. Fetch Global Portfolio Performance
+            global_performance = await self.api.get_portfolio_performance()
+            
+            # 3. Fetch Data per Account
+            account_performances = {}
+            holdings_by_account = {}
+            
+            # Check if holdings are enabled in config
+            show_holdings = self.entry.data.get(CONF_SHOW_HOLDINGS, True)
+
+            for account in accounts_list:
+                if account.get("isExcluded"):
+                    continue
+                    
+                account_id = account["id"]
+                
+                # A. Fetch Performance
+                try:
+                    perf_data = await self.api.get_portfolio_performance(account_id=account_id)
+                    account_performances[account_id] = perf_data
+                except Exception as e:
+                    _LOGGER.warning(f"Failed to fetch performance for account {account['name']}: {e}")
+
+                # B. Fetch Holdings (if enabled)
+                if show_holdings:
+                    try:
+                        # We fetch per account to ensure we know exactly which account the holding belongs to
+                        holdings_data = await self.api.get_holdings(account_id=account_id)
+                        # The API usually returns { "holdings": [...] }
+                        holdings_by_account[account_id] = holdings_data.get("holdings", [])
+                    except Exception as e:
+                        _LOGGER.warning(f"Failed to fetch holdings for account {account['name']}: {e}")
+
+            return {
+                "accounts": accounts_data,
+                "global_performance": global_performance,
+                "account_performances": account_performances,
+                "account_holdings": holdings_by_account # New data structure
+            }
+
+        except Exception as err:
+            raise UpdateFailed(f"Error communicating with API: {err}")
