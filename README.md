@@ -30,14 +30,25 @@ Sensors are created for each of your Ghostfolio accounts (excluding hidden ones)
 ### 3. Per-Holding Sensors (Assets)
 Track every individual asset in your portfolio with a dedicated sensor:
 - **Sensor State**: Total market value of the holding in your base currency.
-- **Rich Attributes**:
-  - `current_price`: Market price in the asset's native currency (e.g., USD).
-  - `market_price_in_base_currency`: Market price converted to your portfolio's currency (e.g., GBP).
-  - `average_buy_price`: Your average buy price (in base currency).
-  - `number_of_shares`: Total quantity held.
-  - `gain_value`: Monetary gain/loss.
-  - `gain_pct`: Percentage gain/loss.
-  - `trend_vs_buy`: Quick indicator (`up`, `down`, or `break_even`) comparing current price vs. buy price.
+**Attributes:**
+
+| Attribute | Description |
+| --- | --- |
+| `ticker` | The symbol of the asset (e.g., `AAPL`, `VWRL.AS`). |
+| `account` | The name of the account holding this asset (e.g., `ISA`, `Trading`). |
+| `asset_class` | The class of the asset (e.g., `EQUITY`, `CRYPTOCURRENCY`). |
+| `number_of_shares` | Total quantity of shares held. |
+| `currency_asset` | The native currency of the asset (e.g., `USD` for Apple). |
+| `currency_base` | Your portfolio's base currency (e.g., `GBP`). |
+| `market_price` | Current price of one share in the **asset's** currency. |
+| `market_price_currency` | The currency code for the market price (e.g., `USD`). |
+| `market_price_in_base_currency` | Current price of one share converted to your **base** currency. |
+| `average_buy_price` | Average buy price per share in your **base** currency. |
+| `average_buy_price_currency` | The currency code for the average buy price (e.g., `GBP`). |
+| `gain_value` | Total monetary gain/loss in your **base** currency. |
+| `gain_value_currency` | The currency code for the gain value (e.g., `GBP`). |
+| `gain_pct` | Total percentage gain/loss (`Simple Gain`). |
+| `trend_vs_buy` | Indicator (`up`, `down`, or `break_even`) comparing current price vs. average buy price. |
 
 ## Installation
 
