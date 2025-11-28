@@ -12,4 +12,4 @@ services:
     privileged: true
     network_mode: host
     environment:
-      - TZ=Europe/Berlin
+      - TZ=Europe/London

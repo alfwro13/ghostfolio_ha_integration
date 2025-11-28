@@ -78,24 +78,64 @@ translations/
 ## Key Components
 
 ### API Client (`api.py`)
-- Handles authentication with Ghostfolio
-- Manages HTTP sessions and SSL verification
-- Implements retry logic for expired tokens
-- Provides portfolio performance data retrieval
+
+* Handles authentication with Ghostfolio (`/api/v1/auth/anonymous`)
+
+* **`get_portfolio_performance`**: Fetches total or per-account performance
+
+* **`get_accounts`**: Fetches list of accounts and base currency settings
+
+* **`get_holdings`**: Fetches individual asset data per account
 
 ### Sensors (`sensor.py`)
-- **Net Worth**: Total portfolio value
-- **Total Value**: Current holdings value
-- **Monetary Balance**: Cash balance
-- **Performance**: Portfolio performance metrics
-- **Total Return**: Absolute return value
-- **Total Return Percentage**: Percentage return
+
+The integration now creates three distinct types of sensors, controlled by configuration options:
+
+**1. Global Portfolio Sensors**
+
+* **Portfolio Value**: Current total market value
+
+* **Portfolio Cost**: Total investment amount
+
+* **Portfolio Gain**: Absolute net performance
+
+* **Portfolio Gain FX**: Absolute net performance with currency effects
+
+* **Simple Gain %**: Money-weighted return proxy `(Value - Cost) / Cost`
+
+* **Time-Weighted Return %**: Strategy performance (Ghostfolio standard)
+
+* **Time-Weighted Return FX %**: Strategy performance with currency effects
+
+**2. Per-Account Sensors**
+Dynamically created for each account (e.g., "ISA", "Trading"):
+
+* **Value**: Current market value
+
+* **Cost**: Total investment
+
+* **Gain**: Absolute gain/loss
+
+* **Simple Gain %**: Percentage gain/loss
+
+* **Time-Weighted Return %**: Account-specific strategy performance
+
+**3. Per-Holding Sensors**
+One sensor created for every asset in your portfolio:
+
+* **State**: Total market value in base currency
+
+* **Attributes**: `current_price`, `average_buy_price`, `number_of_shares`, `gain_value`, `gain_pct`, `trend_vs_buy`
 
 ### Configuration Flow (`config_flow.py`)
-- Supports multiple portfolio configurations
-- Custom portfolio naming
-- SSL verification options
-- Reconfiguration support
+
+* **Show Portfolio Totals**: Boolean toggle for global sensors
+
+* **Show Individual Accounts**: Boolean toggle for account sensors
+
+* **Show Holdings**: Boolean toggle for individual asset sensors
+
+* Supports re-configuration of these options without reinstalling
 
 ## Development Guidelines
 

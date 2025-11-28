@@ -77,7 +77,6 @@ jobs:
             ## Installation
             
             ### HACS (Recommended)
-            [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=MichelFR&repository=ha_ghostfolio&category=integration)
             
             - Add this repository as a custom repository in HACS
             - Install or update the Ghostfolio integration
@@ -88,7 +87,7 @@ jobs:
             - Restart Home Assistant
             
             ## What's Changed
-            Full Changelog: https://github.com/MichelFR/ha_ghostfolio/compare/${{ steps.previous_version.outputs.tag }}...${{ steps.version.outputs.tag }}
+            Full Changelog: https://github.com/alfwro13/ghostfolio_ha_integration/compare/${{ steps.previous_version.outputs.tag }}...${{ steps.version.outputs.tag }}
           draft: false
           prerelease: false
         env:
