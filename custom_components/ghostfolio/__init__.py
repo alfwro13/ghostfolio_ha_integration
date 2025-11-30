@@ -111,10 +111,42 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 try:
                     wl_response = await self.api.get_watchlist()
                     # Handle response being list or dict depending on API version
+                    raw_items = []
                     if isinstance(wl_response, list):
-                        watchlist_items = wl_response
+                        raw_items = wl_response
                     elif isinstance(wl_response, dict):
-                        watchlist_items = wl_response.get("watchlist", []) or wl_response.get("items", [])
+                        raw_items = wl_response.get("watchlist", []) or wl_response.get("items", [])
+                    
+                    # Enrich watchlist items with Market Data (Price & Currency)
+                    for item in raw_items:
+                        symbol = item.get("symbol")
+                        data_source = item.get("dataSource")
+                        
+                        # Only fetch if we have valid identifiers
+                        if symbol and data_source:
+                            try:
+                                # Fetch detailed market data for this symbol
+                                market_data_resp = await self.api.get_market_data(data_source, symbol)
+                                
+                                # A. Extract Price from 'marketData' (List of history, last item is newest)
+                                history = market_data_resp.get("marketData", [])
+                                if history and isinstance(history, list) and len(history) > 0:
+                                    latest_entry = history[-1]
+                                    item["marketPrice"] = latest_entry.get("marketPrice")
+                                    item["marketDate"] = latest_entry.get("date")
+                                
+                                # B. Extract Currency/Class from 'assetProfile' (if missing in summary)
+                                profile = market_data_resp.get("assetProfile", {})
+                                if not item.get("currency"):
+                                    item["currency"] = profile.get("currency")
+                                if not item.get("assetClass"):
+                                    item["assetClass"] = profile.get("assetClass")
+                                    
+                            except Exception as err:
+                                _LOGGER.debug(f"Failed to enrich watchlist item {symbol}: {err}")
+                        
+                        watchlist_items.append(item)
+                        
                 except Exception as e:
                     _LOGGER.warning(f"Failed to fetch watchlist: {e}")
 
