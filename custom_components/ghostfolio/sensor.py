@@ -22,6 +22,7 @@ from .const import (
     CONF_SHOW_TOTALS,
     CONF_SHOW_ACCOUNTS,
     CONF_SHOW_HOLDINGS,
+    CONF_SHOW_WATCHLIST,
     DOMAIN,
 )
 
@@ -41,6 +42,7 @@ async def async_setup_entry(
     show_totals = config_entry.data.get(CONF_SHOW_TOTALS, True)
     show_accounts = config_entry.data.get(CONF_SHOW_ACCOUNTS, True)
     show_holdings = config_entry.data.get(CONF_SHOW_HOLDINGS, True)
+    show_watchlist = config_entry.data.get(CONF_SHOW_WATCHLIST, True)
 
     # 1. Add Global Portfolio Sensors
     if show_totals:
@@ -91,12 +93,20 @@ async def async_setup_entry(
 
             for holding in holdings_list:
                 # Ensure valid holding with quantity
-                if float(holding.get("quantity", 0)) > 0:
+                if float(holding.get("quantity") or 0) > 0:
                     entities.append(
                         GhostfolioHoldingSensor(
                             coordinator, config_entry, account, holding
                         )
                     )
+
+    # 3. Add Watchlist Sensors
+    if show_watchlist:
+        watchlist_items = coordinator.data.get("watchlist", [])
+        for item in watchlist_items:
+            entities.append(
+                GhostfolioWatchlistSensor(coordinator, config_entry, item)
+            )
 
     if entities:
         async_add_entities(entities)
@@ -503,12 +513,12 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
 
         # 2. Extract Raw Values
         quantity = float(data.get("quantity") or 0)
-        investment_in_base = float(data.get("investment", 0))  # Total Cost (Base)
+        investment_in_base = float(data.get("investment") or 0)
         current_value_in_base = float(
-            data.get("valueInBaseCurrency") or data.get("value", 0)
+            data.get("valueInBaseCurrency") or data.get("value") or 0
         )
         market_price_asset = float(
-            data.get("marketPrice", 0)
+            data.get("marketPrice") or 0
         )  # Price in Asset Currency
 
         # 3. Calculate Derived Values (Base Currency)
@@ -554,4 +564,73 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
             # --- Analysis ---
             "trend_vs_buy": trend,
             "asset_class": data.get("assetClass"),
+        }
+
+
+# --- WATCHLIST SENSORS ---
+
+
+class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
+    """Sensor for a Watchlist Item."""
+
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, coordinator, config_entry, item_data):
+        super().__init__(coordinator, config_entry)
+        self.symbol = item_data.get("symbol")
+        self.data_source = item_data.get("dataSource")
+        self.ticker_name = item_data.get("name", self.symbol)
+
+        # Unique ID using "watchlist" prefix
+        safe_symbol = slugify(self.symbol)
+        self._attr_unique_id = f"ghostfolio_watchlist_{safe_symbol}_{config_entry.entry_id}"
+
+        self._attr_name = f"Watchlist - {self.ticker_name}"
+
+    @property
+    def item_data(self) -> dict[str, Any] | None:
+        """Find the latest data for this watchlist item."""
+        if not self.coordinator.data:
+            return None
+        
+        watchlist = self.coordinator.data.get("watchlist", [])
+        for item in watchlist:
+            if item.get("symbol") == self.symbol and item.get("dataSource") == self.data_source:
+                return item
+        return None
+
+    @property
+    def native_value(self) -> float | None:
+        """State is the Market Price."""
+        data = self.item_data
+        if not data:
+            return None
+        return data.get("marketPrice")
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        """Return the currency of the asset."""
+        data = self.item_data
+        if not data:
+            return None
+        return data.get("currency")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        data = self.item_data
+        if not data:
+            return None
+        
+        return {
+            "ticker": self.symbol,
+            "data_source": self.data_source,
+            "asset_class": data.get("assetClass"),
+            "market_price": data.get("marketPrice"),
+            "currency": data.get("currency"),
+            "trend_50d": data.get("trend50d"),
+            "trend_200d": data.get("trend200d"),
+            "market_change_24h": data.get("marketChange"),
+            "market_change_pct_24h": data.get("marketChangePercentage"),
         }
