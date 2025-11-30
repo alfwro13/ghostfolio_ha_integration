@@ -50,6 +50,13 @@ Track every individual asset in your portfolio with a dedicated sensor:
 | `gain_pct` | Total percentage gain/loss (`Simple Gain`). |
 | `trend_vs_buy` | Indicator (`up`, `down`, or `break_even`) comparing current price vs. average buy price. |
 
+### 4. Watchlist Sensors
+Track items from your Ghostfolio Watchlist even if you don't own them yet.
+- **Sensor State**: Current market price.
+- **Attributes**: `market_change_24h`, `market_change_pct_24h`, `trend_50d`, `trend_200d`.
+*(Requires "Show Watchlist Items" to be enabled in configuration)*
+
+
 ## Installation
 
 ### HACS (Recommended)
