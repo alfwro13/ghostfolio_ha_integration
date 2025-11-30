@@ -27,7 +27,8 @@ from .const import (
     CONF_UPDATE_INTERVAL,
     CONF_SHOW_TOTALS,
     CONF_SHOW_ACCOUNTS,
-    CONF_SHOW_HOLDINGS,   # <--- Imported
+    CONF_SHOW_HOLDINGS,
+    CONF_SHOW_WATCHLIST,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN
 )
@@ -88,7 +89,8 @@ class GhostfolioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                     vol.Optional(CONF_SHOW_TOTALS, default=True): BooleanSelector(),
                     vol.Optional(CONF_SHOW_ACCOUNTS, default=True): BooleanSelector(),
-                    vol.Optional(CONF_SHOW_HOLDINGS, default=True): BooleanSelector(),  # <--- NEW CHECKBOX
+                    vol.Optional(CONF_SHOW_HOLDINGS, default=True): BooleanSelector(),
+                    vol.Optional(CONF_SHOW_WATCHLIST, default=True): BooleanSelector(),
                     vol.Optional(CONF_VERIFY_SSL, default=True): BooleanSelector(),
                     vol.Optional(CONF_UPDATE_INTERVAL, default=DEFAULT_UPDATE_INTERVAL): NumberSelector(
                         NumberSelectorConfig(
@@ -154,7 +156,8 @@ class GhostfolioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         ),
                         vol.Optional(CONF_SHOW_TOTALS, default=True): BooleanSelector(),
                         vol.Optional(CONF_SHOW_ACCOUNTS, default=True): BooleanSelector(),
-                        vol.Optional(CONF_SHOW_HOLDINGS, default=True): BooleanSelector(), # <--- NEW CHECKBOX
+                        vol.Optional(CONF_SHOW_HOLDINGS, default=True): BooleanSelector(),
+                        vol.Optional(CONF_SHOW_WATCHLIST, default=True): BooleanSelector(),
                         vol.Optional(CONF_VERIFY_SSL, default=True): BooleanSelector(),
                         vol.Optional(CONF_UPDATE_INTERVAL, default=DEFAULT_UPDATE_INTERVAL): NumberSelector(
                             NumberSelectorConfig(

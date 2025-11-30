@@ -11,6 +11,7 @@
           "show_totals": "Show Portfolio Totals",
           "show_accounts": "Show Individual Accounts",
           "show_holdings": "Show Holdings (One sensor per asset)",
+          "show_watchlist": "Show Watchlist Items",
           "verify_ssl": "Verify SSL Certificate",
           "update_interval": "Update Interval"
         },
@@ -21,6 +22,7 @@
           "show_totals": "Create sensors for the total portfolio performance",
           "show_accounts": "Create sensors for each individual account found in Ghostfolio",
           "show_holdings": "Create individual sensors for every stock/asset you hold, grouped by account",
+          "show_watchlist": "Create sensors for items in your Ghostfolio Watchlist",
           "verify_ssl": "Disable this if you're using corporate proxies like Zscaler that intercept SSL certificates",
           "update_interval": "How often to update portfolio data (in minutes, min: 1, max: 1440)"
         }
@@ -35,6 +37,7 @@
           "show_totals": "Show Portfolio Totals",
           "show_accounts": "Show Individual Accounts",
           "show_holdings": "Show Holdings (One sensor per asset)",
+          "show_watchlist": "Show Watchlist Items",
           "verify_ssl": "Verify SSL Certificate",
           "update_interval": "Update Interval"
         },
@@ -45,6 +48,7 @@
           "show_totals": "Create sensors for the total portfolio performance",
           "show_accounts": "Create sensors for each individual account found in Ghostfolio",
           "show_holdings": "Create individual sensors for every stock/asset you hold, grouped by account",
+          "show_watchlist": "Create sensors for items in your Ghostfolio Watchlist",
           "verify_ssl": "Disable this if you're using corporate proxies like Zscaler that intercept SSL certificates",
           "update_interval": "How often to update portfolio data (in minutes, min: 1, max: 1440)"
         }

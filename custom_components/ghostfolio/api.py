@@ -1,7 +1,6 @@
 """API client for Ghostfolio."""
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -76,6 +75,19 @@ class GhostfolioAPI:
         return await self._make_authenticated_request(
             f"{self.base_url}/api/v1/portfolio/holdings",
             params=params
+        )
+
+    async def get_watchlist(self) -> list[dict[str, Any]]:
+        """Get watchlist items."""
+        return await self._make_authenticated_request(
+            f"{self.base_url}/api/v1/watchlist"
+        )
+
+    async def get_market_data(self, data_source: str, symbol: str) -> dict[str, Any]:
+        """Get market data (price history and profile) for a specific symbol."""
+        # This endpoint provides the 'marketData' list and 'assetProfile'
+        return await self._make_authenticated_request(
+            f"{self.base_url}/api/v1/market-data/{data_source}/{symbol}"
         )
 
     async def _make_authenticated_request(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
