@@ -128,12 +128,29 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                                 # Fetch detailed market data for this symbol
                                 market_data_resp = await self.api.get_market_data(data_source, symbol)
                                 
-                                # A. Extract Price from 'marketData' (List of history, last item is newest)
+                                # A. Extract Price & History from 'marketData'
+                                # marketData is a list of objects sorted by date: [ {date:..., marketPrice:...}, ... ]
                                 history = market_data_resp.get("marketData", [])
+                                
                                 if history and isinstance(history, list) and len(history) > 0:
+                                    # 1. Get Latest Price
                                     latest_entry = history[-1]
-                                    item["marketPrice"] = latest_entry.get("marketPrice")
+                                    current_price = latest_entry.get("marketPrice") or 0
+                                    
+                                    item["marketPrice"] = current_price
                                     item["marketDate"] = latest_entry.get("date")
+
+                                    # 2. Calculate 24h Change (Latest - Previous)
+                                    if len(history) >= 2:
+                                        prev_entry = history[-2]
+                                        prev_price = prev_entry.get("marketPrice") or 0
+                                        
+                                        if prev_price > 0:
+                                            change_val = current_price - prev_price
+                                            change_pct = (change_val / prev_price) * 100
+                                            
+                                            item["marketChange"] = change_val
+                                            item["marketChangePercentage"] = change_pct
                                 
                                 # B. Extract Currency/Class from 'assetProfile' (if missing in summary)
                                 profile = market_data_resp.get("assetProfile", {})
