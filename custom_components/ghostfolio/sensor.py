@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
@@ -36,80 +36,103 @@ async def async_setup_entry(
 ) -> None:
     """Set up Ghostfolio sensor platform."""
     coordinator = config_entry.runtime_data
-    entities = []
-
-    # Check configuration options (Default to True if not present for backward compatibility)
+    
+    # Check configuration options
     show_totals = config_entry.data.get(CONF_SHOW_TOTALS, True)
     show_accounts = config_entry.data.get(CONF_SHOW_ACCOUNTS, True)
     show_holdings = config_entry.data.get(CONF_SHOW_HOLDINGS, True)
     show_watchlist = config_entry.data.get(CONF_SHOW_WATCHLIST, True)
 
-    # 1. Add Global Portfolio Sensors
+    # Track created entities to prevent duplicates
+    known_ids: set[str] = set()
+
+    # 1. Add Global Portfolio Sensors (These are static, add them once)
     if show_totals:
-        entities.extend(
-            [
-                GhostfolioCurrentValueSensor(coordinator, config_entry),
-                GhostfolioNetPerformanceSensor(coordinator, config_entry),
-                GhostfolioTimeWeightedReturnSensor(coordinator, config_entry),
-                GhostfolioTotalInvestmentSensor(coordinator, config_entry),
-                GhostfolioNetPerformanceWithCurrencySensor(coordinator, config_entry),
-                GhostfolioTimeWeightedReturnFXSensor(coordinator, config_entry),
-                GhostfolioSimpleGainPercentSensor(coordinator, config_entry),
-            ]
-        )
+        global_sensors = [
+            GhostfolioCurrentValueSensor(coordinator, config_entry),
+            GhostfolioNetPerformanceSensor(coordinator, config_entry),
+            GhostfolioTimeWeightedReturnSensor(coordinator, config_entry),
+            GhostfolioTotalInvestmentSensor(coordinator, config_entry),
+            GhostfolioNetPerformanceWithCurrencySensor(coordinator, config_entry),
+            GhostfolioTimeWeightedReturnFXSensor(coordinator, config_entry),
+            GhostfolioSimpleGainPercentSensor(coordinator, config_entry),
+        ]
+        async_add_entities(global_sensors)
+        # Mark globals as known (using their property logic)
+        for s in global_sensors:
+            known_ids.add(s.unique_id)
 
-    # 2. Iterate Accounts for Account & Holding Sensors
-    accounts_data = coordinator.data.get("accounts", {}).get("accounts", [])
+    @callback
+    def _update_sensors():
+        """Check for new sensors (accounts, holdings, watchlist) and add them."""
+        new_entities = []
+        
+        # --- ACCOUNTS & HOLDINGS ---
+        accounts_data = coordinator.data.get("accounts", {}).get("accounts", [])
 
-    for account in accounts_data:
-        # Skip excluded/hidden accounts
-        if account.get("isExcluded", False):
-            continue
+        for account in accounts_data:
+            if account.get("isExcluded", False):
+                continue
 
-        # Add Per-Account Sensors
-        if show_accounts:
-            entities.append(
-                GhostfolioAccountValueSensor(coordinator, config_entry, account)
-            )
-            entities.append(
-                GhostfolioAccountCostSensor(coordinator, config_entry, account)
-            )
-            entities.append(
-                GhostfolioAccountPerformanceSensor(coordinator, config_entry, account)
-            )
-            entities.append(
-                GhostfolioAccountTWRSensor(coordinator, config_entry, account)
-            )
-            entities.append(
-                GhostfolioAccountSimpleGainSensor(coordinator, config_entry, account)
-            )
-
-        # Add Per-Holding Sensors
-        if show_holdings:
             account_id = account["id"]
-            # Look up holdings specifically for this account
-            holdings_map = coordinator.data.get("account_holdings", {})
-            holdings_list = holdings_map.get(account_id, [])
 
-            for holding in holdings_list:
-                # Ensure valid holding with quantity
-                if float(holding.get("quantity") or 0) > 0:
-                    entities.append(
-                        GhostfolioHoldingSensor(
-                            coordinator, config_entry, account, holding
-                        )
-                    )
+            # A. Add Per-Account Sensors
+            if show_accounts:
+                account_sensors = [
+                    GhostfolioAccountValueSensor(coordinator, config_entry, account),
+                    GhostfolioAccountCostSensor(coordinator, config_entry, account),
+                    GhostfolioAccountPerformanceSensor(coordinator, config_entry, account),
+                    GhostfolioAccountTWRSensor(coordinator, config_entry, account),
+                    GhostfolioAccountSimpleGainSensor(coordinator, config_entry, account),
+                ]
+                
+                for sens in account_sensors:
+                    if sens.unique_id not in known_ids:
+                        new_entities.append(sens)
+                        known_ids.add(sens.unique_id)
 
-    # 3. Add Watchlist Sensors
-    if show_watchlist:
-        watchlist_items = coordinator.data.get("watchlist", [])
-        for item in watchlist_items:
-            entities.append(
-                GhostfolioWatchlistSensor(coordinator, config_entry, item)
-            )
+            # B. Add Per-Holding Sensors
+            if show_holdings:
+                holdings_map = coordinator.data.get("account_holdings", {})
+                holdings_list = holdings_map.get(account_id, [])
 
-    if entities:
-        async_add_entities(entities)
+                for holding in holdings_list:
+                    # Ensure valid holding with quantity (ignore fully sold positions if quantity is 0)
+                    if float(holding.get("quantity") or 0) > 0:
+                        # Construct ID manually to check against known_ids before creating object
+                        symbol = holding.get("symbol")
+                        safe_symbol = slugify(symbol)
+                        unique_id = f"ghostfolio_holding_{account_id}_{safe_symbol}_{config_entry.entry_id}"
+                        
+                        if unique_id not in known_ids:
+                            sensor = GhostfolioHoldingSensor(coordinator, config_entry, account, holding)
+                            new_entities.append(sensor)
+                            known_ids.add(unique_id)
+
+        # --- WATCHLIST ---
+        if show_watchlist:
+            watchlist_items = coordinator.data.get("watchlist", [])
+            for item in watchlist_items:
+                symbol = item.get("symbol")
+                # Construct ID manually
+                safe_symbol = slugify(symbol)
+                unique_id = f"ghostfolio_watchlist_{safe_symbol}_{config_entry.entry_id}"
+                
+                if unique_id not in known_ids:
+                    sensor = GhostfolioWatchlistSensor(coordinator, config_entry, item)
+                    new_entities.append(sensor)
+                    known_ids.add(unique_id)
+
+        # If we found new entities, register them
+        if new_entities:
+            async_add_entities(new_entities)
+
+    # 2. Register the listener
+    # This ensures _update_sensors runs every time the coordinator fetches new data
+    config_entry.async_on_unload(coordinator.async_add_listener(_update_sensors))
+
+    # 3. Run it immediately to load initial data
+    _update_sensors()
 
 
 class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
@@ -331,7 +354,7 @@ class GhostfolioAccountBaseSensor(GhostfolioBaseSensor):
     """Base class for Account-specific sensors."""
 
     def __init__(self, coordinator, config_entry, account_data):
-        super().__init__(coordinator, config_entry)
+        super().__init__(coordinator, config_entry, account_data)
         self.account_id = account_data["id"]
         self.account_name = account_data["name"]
 
