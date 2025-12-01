@@ -58,7 +58,7 @@ async def async_setup_entry(
             GhostfolioSimpleGainPercentSensor(coordinator, config_entry),
         ]
         async_add_entities(global_sensors)
-        # Mark globals as known (using their property logic)
+        # Mark globals as known
         for s in global_sensors:
             known_ids.add(s.unique_id)
 
@@ -97,9 +97,8 @@ async def async_setup_entry(
                 holdings_list = holdings_map.get(account_id, [])
 
                 for holding in holdings_list:
-                    # Ensure valid holding with quantity (ignore fully sold positions if quantity is 0)
+                    # Ensure valid holding with quantity
                     if float(holding.get("quantity") or 0) > 0:
-                        # Construct ID manually to check against known_ids before creating object
                         symbol = holding.get("symbol")
                         safe_symbol = slugify(symbol)
                         unique_id = f"ghostfolio_holding_{account_id}_{safe_symbol}_{config_entry.entry_id}"
@@ -114,7 +113,6 @@ async def async_setup_entry(
             watchlist_items = coordinator.data.get("watchlist", [])
             for item in watchlist_items:
                 symbol = item.get("symbol")
-                # Construct ID manually
                 safe_symbol = slugify(symbol)
                 unique_id = f"ghostfolio_watchlist_{safe_symbol}_{config_entry.entry_id}"
                 
@@ -128,10 +126,9 @@ async def async_setup_entry(
             async_add_entities(new_entities)
 
     # 2. Register the listener
-    # This ensures _update_sensors runs every time the coordinator fetches new data
     config_entry.async_on_unload(coordinator.async_add_listener(_update_sensors))
 
-    # 3. Run it immediately to load initial data
+    # 3. Run it immediately
     _update_sensors()
 
 
@@ -354,7 +351,7 @@ class GhostfolioAccountBaseSensor(GhostfolioBaseSensor):
     """Base class for Account-specific sensors."""
 
     def __init__(self, coordinator, config_entry, account_data):
-        super().__init__(coordinator, config_entry, account_data)
+        super().__init__(coordinator, config_entry) # <--- FIXED HERE (Removed account_data)
         self.account_id = account_data["id"]
         self.account_name = account_data["name"]
 
