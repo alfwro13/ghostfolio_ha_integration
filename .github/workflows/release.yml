@@ -74,18 +74,7 @@ jobs:
             
             ${{ steps.changelog.outputs.changes }}
             
-            ## Installation
-            
-            ### HACS (Recommended)
-            
-            - Add this repository as a custom repository in HACS
-            - Install or update the Ghostfolio integration
-            
-            ### Manual Installation
-            - Download the source code zip from the assets below
-            - Extract to `custom_components/ghostfolio/`
-            - Restart Home Assistant
-            
+           
             ## What's Changed
             Full Changelog: https://github.com/alfwro13/ghostfolio_ha_integration/compare/${{ steps.previous_version.outputs.tag }}...${{ steps.version.outputs.tag }}
           draft: false
