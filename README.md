@@ -8,7 +8,11 @@ A Home Assistant Custom Component (HACS integration) for monitoring your [Ghostf
 
 ## Features
 
-This integration automatically detects your portfolio's base currency and allows you to toggle exactly which sensors you want to see via the configuration options.
+This integration automatically detects your portfolio's base currency and offers granular tracking options:
+- **Global Totals:** Track overall portfolio value and performance.
+- **Account Breakdowns:** Individual sensors for each investment account.
+- **Asset Tracking:** Dedicated sensors for every holding and watchlist item.
+- **Price Alerts:** Configurable High/Low limit numbers for every asset to trigger automations.
 
 ### 1. Global Portfolio Sensors
 - **Portfolio Value**: The current total market value of your portfolio.
@@ -30,32 +34,26 @@ Sensors are created for each of your Ghostfolio accounts (excluding hidden ones)
 ### 3. Per-Holding Sensors (Assets)
 Track every individual asset in your portfolio with a dedicated sensor:
 - **Sensor State**: Total market value of the holding in your base currency.
-**Attributes:**
-
-| Attribute | Description |
-| --- | --- |
-| `ticker` | The symbol of the asset (e.g., `AAPL`, `VWRL.AS`). |
-| `account` | The name of the account holding this asset (e.g., `ISA`, `Trading`). |
-| `asset_class` | The class of the asset (e.g., `EQUITY`, `CRYPTOCURRENCY`). |
-| `number_of_shares` | Total quantity of shares held. |
-| `currency_asset` | The native currency of the asset (e.g., `USD` for Apple). |
-| `currency_base` | Your portfolio's base currency (e.g., `GBP`). |
-| `market_price` | Current price of one share in the **asset's** currency. |
-| `market_price_currency` | The currency code for the market price (e.g., `USD`). |
-| `market_price_in_base_currency` | Current price of one share converted to your **base** currency. |
-| `average_buy_price` | Average buy price per share in your **base** currency. |
-| `average_buy_price_currency` | The currency code for the average buy price (e.g., `GBP`). |
-| `gain_value` | Total monetary gain/loss in your **base** currency. |
-| `gain_value_currency` | The currency code for the gain value (e.g., `GBP`). |
-| `gain_pct` | Total percentage gain/loss (`Simple Gain`). |
-| `trend_vs_buy` | Indicator (`up`, `down`, or `break_even`) comparing current price vs. average buy price. |
+- **Friendly Name**: The ticker symbol (e.g., "AAPL", "VWRL.AS").
+- **Attributes**: `market_price`, `average_buy_price`, `number_of_shares`, `gain_value`, `gain_pct`, `trend_vs_buy`.
 
 ### 4. Watchlist Sensors
 Track items from your Ghostfolio Watchlist even if you don't own them yet.
 - **Sensor State**: Current market price.
+- **Friendly Name**: The ticker symbol (e.g., "TSLA").
 - **Attributes**: `market_change_24h`, `market_change_pct_24h`, `trend_50d`, `trend_200d`.
 *(Requires "Show Watchlist Items" to be enabled in configuration)*
 
+### 5. Price Limit Configuration (Inputs)
+For every Holding and Watchlist item, the integration creates two **Number** entities that allow you to set price targets directly from Home Assistant. You can use these in automations to send notifications when a price crosses your limit.
+
+- **[Ticker] - Low Limit**
+- **[Ticker] - High Limit**
+
+**Entity Organization:**
+These entities are grouped into **Devices** based on their Account (e.g., "ISA", "Watchlist").
+- **Friendly Name**: `AAPL - High Limit`
+- **Entity ID**: `number.isa_aapl_high_limit`
 
 ## Installation
 
@@ -85,7 +83,8 @@ Track items from your Ghostfolio Watchlist even if you don't own them yet.
    - **Access Token**: Your Ghostfolio access token.
    - **Show Portfolio Totals**: (Optional) Check to create global portfolio sensors.
    - **Show Individual Accounts**: (Optional) Check to create sensors for each account.
-   - **Show Holdings**: (Optional) Check to create sensors for individual assets.
+   - **Show Holdings**: (Optional) Check to create sensors and limit numbers for individual assets.
+   - **Show Watchlist Items**: (Optional) Check to create sensors and limit numbers for watchlist items.
 
 ### Getting Your Access Token
 
@@ -102,6 +101,8 @@ This integration uses the following Ghostfolio API endpoints:
 - `GET /api/v1/account`: For retrieving the account list and base currency settings.
 - `GET /api/v2/portfolio/performance`: For retrieving global and per-account performance data.
 - `GET /api/v1/portfolio/holdings`: For retrieving individual asset details.
+- `GET /api/v1/watchlist`: For retrieving watchlist items.
+- `GET /api/v1/market-data`: For fetching real-time price and history for watchlist items.
 
 ## Data Update Frequency
 
