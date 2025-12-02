@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from homeassistant.components.number import (
     NumberEntity,
@@ -111,6 +110,12 @@ class GhostfolioLimitNumber(CoordinatorEntity, RestoreNumber):
 
     _attr_has_entity_name = True
     _attr_mode = "box"
+    
+    # --- RANGE CONFIGURATION ---
+    _attr_native_min_value = 0
+    _attr_native_max_value = 900000
+    _attr_native_step = 0.01
+    # ---------------------------
 
     def __init__(
         self, 
