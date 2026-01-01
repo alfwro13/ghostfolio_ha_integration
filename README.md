@@ -13,6 +13,8 @@ This integration automatically detects your portfolio's base currency and offers
 - **Account Breakdowns:** Individual sensors for each investment account.
 - **Asset Tracking:** Dedicated sensors for every holding and watchlist item.
 - **Price Alerts:** Configurable High/Low limit numbers for every asset to trigger automations.
+- **Diagnostic Sensors:** Monitor the connection status of your Ghostfolio server and its data providers.
+- **Smart Health Checks:** Automatically detects if a data provider (e.g., Yahoo Finance) is down and marks affected sensors as `Unknown` instead of reporting erroneous zero values.
 
 ### 1. Global Portfolio Sensors
 - **Portfolio Value**: The current total market value of your portfolio.
@@ -22,6 +24,8 @@ This integration automatically detects your portfolio's base currency and offers
 - **Simple Gain %**: The simple percentage return, calculated as `(Value - Cost) / Cost`.
 - **Time-Weighted Return %**: The Time-Weighted Rate of Return (TWR) of your portfolio (measures strategy performance, ignoring deposits/withdrawals).
 - **Time-Weighted Return FX %**: The TWR percentage including currency effects.
+
+*Note: If any active holding in your portfolio relies on a data provider that is currently down, these global summary sensors will report `Unknown` to prevent misleading data.*
 
 ### 2. Per-Account Sensors
 Sensors are created for each of your Ghostfolio accounts (excluding hidden ones):
@@ -36,6 +40,8 @@ Track every individual asset in your portfolio with a dedicated sensor:
 - **Sensor State**: Total market value of the holding in your base currency.
 - **Friendly Name**: The ticker symbol (e.g., "AAPL", "VWRL.AS").
 - **Attributes**: `market_price`, `average_buy_price`, `number_of_shares`, `gain_value`, `gain_pct`, `trend_vs_buy`.
+
+*Note: If the data provider for a specific holding is down, its sensor will report `Unknown`.*
 
 ### 4. Watchlist Sensors
 Track items from your Ghostfolio Watchlist even if you don't own them yet.
@@ -54,6 +60,12 @@ For every Holding and Watchlist item, the integration creates two **Number** ent
 These entities are grouped into **Devices** based on their Account (e.g., "ISA", "Watchlist").
 - **Friendly Name**: `AAPL - High Limit`
 - **Entity ID**: `number.isa_aapl_high_limit`
+
+### 6. Diagnostic Sensors
+To help you troubleshoot issues, the integration provides binary sensors that track the health of the system. You can find these on the main Portfolio Device page in Home Assistant.
+
+- **Ghostfolio Server**: Indicates if your Ghostfolio instance is reachable (`Connected` / `Disconnected`).
+- **Data Provider Status**: Individual sensors for each data provider (e.g., `Yahoo Status`, `Coingecko Status`) showing if they are `Available` or `Unavailable`.
 
 ## Installation
 
@@ -103,6 +115,7 @@ This integration uses the following Ghostfolio API endpoints:
 - `GET /api/v1/portfolio/holdings`: For retrieving individual asset details.
 - `GET /api/v1/watchlist`: For retrieving watchlist items.
 - `GET /api/v1/market-data`: For fetching real-time price and history for watchlist items.
+- `GET /api/v1/health/data-provider/{provider}`: For checking the status of data providers.
 
 ## Data Update Frequency
 
@@ -120,4 +133,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 This integration is maintained by @alfwro13.
-Originally based on the [ha_ghostfolio repository by MichelFR](https://github.com/MichelFR/ha_ghostfolio). It has since been significantly expanded to include granular per-holding tracking, per-account sensors, dynamic configuration options, and improved currency handling.
+Originally based on the [ha_ghostfolio repository by MichelFR](https://github.com/MichelFR/ha_ghostfolio). It has since been significantly expanded to include granular per-holding tracking, per-account sensors, dynamic configuration options, diagnostic tools, and improved currency handling.
