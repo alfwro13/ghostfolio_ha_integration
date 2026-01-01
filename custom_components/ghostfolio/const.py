@@ -16,3 +16,12 @@ CONF_SHOW_WATCHLIST = "show_watchlist"
 # Default values
 DEFAULT_NAME = "Ghostfolio"
 DEFAULT_UPDATE_INTERVAL = 15  # minutes
+
+# Data Providers to check
+DATA_PROVIDERS = [
+    "YAHOO",
+    "COINGECKO",
+    "ALPHA_VANTAGE",
+    "FINANCIAL_MODELING_PREP",
+    "EOD_HISTORICAL_DATA",
+]
