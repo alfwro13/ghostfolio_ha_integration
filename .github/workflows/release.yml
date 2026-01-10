@@ -25,6 +25,13 @@ jobs:
           VERSION=$(python3 -c "import json; print(json.load(open('custom_components/ghostfolio/manifest.json'))['version'])")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          
+          # Check if version contains beta, alpha, or rc to determine if it's a pre-release
+          if [[ "$VERSION" =~ (beta|alpha|rc) ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Check if tag exists
         id: tag_check
@@ -78,7 +85,7 @@ jobs:
             ## What's Changed
             Full Changelog: https://github.com/alfwro13/ghostfolio_ha_integration/compare/${{ steps.previous_version.outputs.tag }}...${{ steps.version.outputs.tag }}
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.version.outputs.prerelease }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
