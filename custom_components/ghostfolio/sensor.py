@@ -14,6 +14,7 @@ from homeassistant.const import PERCENTAGE
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
 
 from . import GhostfolioDataUpdateCoordinator
@@ -573,6 +574,40 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         else:
             trend = "break_even"
 
+        # --- LIMIT CHECK LOGIC ---
+        registry = er.async_get(self.hass)
+        entry_id = self.config_entry.entry_id
+        safe_symbol = slugify(self.symbol)
+        
+        # Helper to check a limit against CURRENT SENSOR VALUE (Total Value for Holdings)
+        def get_limit_status(limit_type, compare_op):
+            # Reconstruct the Number's unique ID
+            # Pattern from number.py: ghostfolio_limit_{limit_type}_{account_id}_{safe_symbol}_{entry_id}
+            num_unique_id = f"ghostfolio_limit_{limit_type}_{self.account_id}_{safe_symbol}_{entry_id}"
+            
+            # Lookup Entity ID
+            entity_id = registry.async_get_entity_id("number", DOMAIN, num_unique_id)
+            
+            is_set = False
+            is_reached = False
+            
+            if entity_id:
+                state_obj = self.hass.states.get(entity_id)
+                if state_obj and state_obj.state not in [None, "unknown", "unavailable"]:
+                    try:
+                        limit_val = float(state_obj.state)
+                        is_set = True
+                        if current_value_in_base > 0: 
+                             if compare_op(current_value_in_base, limit_val):
+                                 is_reached = True
+                    except ValueError:
+                        pass
+            return is_set, is_reached
+
+        low_set, low_reached = get_limit_status("low", lambda val, limit: val <= limit)
+        high_set, high_reached = get_limit_status("high", lambda val, limit: val >= limit)
+        # -------------------------
+
         return {
             "ticker": self.symbol,
             "account": self.account_name,
@@ -590,6 +625,11 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
             "trend_vs_buy": trend,
             "asset_class": data.get("assetClass"),
             "data_source": data.get("dataSource"),
+            # Limit Attributes
+            "low_limit_set": low_set,
+            "low_limit_reached": low_reached,
+            "high_limit_set": high_set,
+            "high_limit_reached": high_reached,
         }
 
 
@@ -657,6 +697,42 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
         data = self.item_data
         if not data:
             return None
+        
+        # --- LIMIT CHECK LOGIC ---
+        registry = er.async_get(self.hass)
+        entry_id = self.config_entry.entry_id
+        safe_symbol = slugify(self.symbol)
+        current_price = data.get("marketPrice") or 0
+
+        # Helper to check a limit against CURRENT SENSOR VALUE (Price for Watchlist)
+        def get_limit_status(limit_type, compare_op):
+            # Reconstruct the Number's unique ID
+            # Pattern from number.py: ghostfolio_watchlist_limit_{limit_type}_{slugify(symbol)}_{entry_id}
+            num_unique_id = f"ghostfolio_watchlist_limit_{limit_type}_{safe_symbol}_{entry_id}"
+            
+            # Lookup Entity ID
+            entity_id = registry.async_get_entity_id("number", DOMAIN, num_unique_id)
+            
+            is_set = False
+            is_reached = False
+            
+            if entity_id:
+                state_obj = self.hass.states.get(entity_id)
+                if state_obj and state_obj.state not in [None, "unknown", "unavailable"]:
+                    try:
+                        limit_val = float(state_obj.state)
+                        is_set = True
+                        if current_price > 0: 
+                             if compare_op(current_price, limit_val):
+                                 is_reached = True
+                    except ValueError:
+                        pass
+            return is_set, is_reached
+
+        low_set, low_reached = get_limit_status("low", lambda val, limit: val <= limit)
+        high_set, high_reached = get_limit_status("high", lambda val, limit: val >= limit)
+        # -------------------------
+
         return {
             "ticker": self.symbol,
             "data_source": self.data_source,
@@ -667,4 +743,9 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
             "trend_200d": data.get("trend200d"),
             "market_change_24h": data.get("marketChange"),
             "market_change_pct_24h": data.get("marketChangePercentage"),
+            # Limit Attributes
+            "low_limit_set": low_set,
+            "low_limit_reached": low_reached,
+            "high_limit_set": high_set,
+            "high_limit_reached": high_reached,
         }
