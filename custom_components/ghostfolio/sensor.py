@@ -604,8 +604,7 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
                         pass
             return is_set, is_reached
 
-        # FIX: Low Limit Reached if limit <= value (Value is ABOVE limit)
-        low_set, low_reached = get_limit_status("low", lambda val, limit: limit <= val)
+        low_set, low_reached = get_limit_status("low", lambda val, limit: val <= limit)
         high_set, high_reached = get_limit_status("high", lambda val, limit: val >= limit)
         # -------------------------
 
@@ -730,8 +729,7 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
                         pass
             return is_set, is_reached
 
-        # FIX: Low Limit Reached if limit <= value (Value is ABOVE limit)
-        low_set, low_reached = get_limit_status("low", lambda val, limit: limit <= val)
+        low_set, low_reached = get_limit_status("low", lambda val, limit: val <= limit)
         high_set, high_reached = get_limit_status("high", lambda val, limit: val >= limit)
         # -------------------------
 
