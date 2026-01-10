@@ -13,6 +13,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.event import async_call_later
 from homeassistant.util import slugify
 
 from . import GhostfolioDataUpdateCoordinator
@@ -169,16 +170,27 @@ class GhostfolioLimitNumber(CoordinatorEntity, RestoreNumber):
         await super().async_added_to_hass()
         if (last_state := await self.async_get_last_number_data()) is not None:
             self._attr_native_value = last_state.native_value
+            
+            # TRIGGER UPDATE ON STARTUP:
+            # We schedule a sensor update with a slight delay. This ensures that this 
+            # Number entity has finished writing its restored state to the registry 
+            # before the sensor tries to read it.
+            async def _delayed_update(_):
+                await self._async_trigger_sensor_update()
+            
+            async_call_later(self.hass, 0.5, _delayed_update)
 
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
         self._attr_native_value = value
         self.async_write_ha_state()
         
-        # --- TRIGGER SENSOR UPDATE ---
-        # When limit changes, we want the sensor attributes to update immediately.
-        # We can find the sensor by reversing the unique_id logic.
-        
+        # TRIGGER UPDATE ON CHANGE:
+        # Immediately force the sensor to recalculate
+        await self._async_trigger_sensor_update()
+
+    async def _async_trigger_sensor_update(self):
+        """Trigger an update on the associated sensor entity."""
         registry = er.async_get(self.hass)
         safe_symbol = slugify(self.symbol)
         
@@ -196,5 +208,6 @@ class GhostfolioLimitNumber(CoordinatorEntity, RestoreNumber):
                 await self.hass.services.async_call(
                     "homeassistant", 
                     "update_entity", 
-                    {"entity_id": entity_id}
+                    {"entity_id": entity_id},
+                    blocking=False
                 )
