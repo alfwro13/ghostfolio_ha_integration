@@ -182,7 +182,12 @@ class GhostfolioLimitNumber(CoordinatorEntity, RestoreNumber):
 
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
-        self._attr_native_value = value
+        # FIXED: Treat 0 as "No Limit" (None) because HA doesn't allow empty inputs
+        if value == 0:
+            self._attr_native_value = None
+        else:
+            self._attr_native_value = value
+            
         self.async_write_ha_state()
         
         # TRIGGER UPDATE ON CHANGE:
