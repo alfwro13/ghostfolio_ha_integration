@@ -411,6 +411,13 @@ class GhostfolioAccountValueSensor(GhostfolioAccountBaseSensor):
             return None
         return self.account_performance_data.get("currentValueInBaseCurrency")
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the account net worth (Value + Cash)."""
+        if not self.coordinator.data:
+            return None
+        return {"current_net_worth": self.account_performance_data.get("currentNetWorth")}
+
 class GhostfolioAccountCostSensor(GhostfolioAccountBaseSensor):
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
