@@ -78,63 +78,40 @@ When you set a value in these number entities, the corresponding main Sensor (Ho
 - **`low_limit_reached`**: Becomes `true` if the value drops to or below your limit.
 - **`high_limit_reached`**: Becomes `true` if the value rises to or above your limit.
 
-### 6. Using Price Alerts in Automations
-Because the alert logic is built directly into the sensors, you can create a single, powerful automation to handle notifications for ALL your assets at once, without needing to reference the number entities.
+### 6. Automations & Alerts (Recommended)
+This integration features a built-in event system to handle price alerts efficiently. Instead of creating complex automations that watch every single sensor state, the integration fires a **single event** whenever a limit is crossed.
+
+**Event Name:** `ghostfolio_limit_alert`
 
 **Example Automation:**
-Trigger when *any* Ghostfolio sensor's `low_limit_reached` attribute turns true.
+This single automation will notify you about **ANY** asset (Holding or Watchlist) that crosses a High or Low limit.
 
 ```yaml
-alias: "Ghostfolio - Low Limit Alert"
+alias: "Ghostfolio - Limit Notification"
+description: "Sends a notification when any Ghostfolio asset crosses a limit."
 trigger:
-  - platform: state
-    entity_id:
-      - sensor.watchlist_apple_inc
-      - sensor.isa_tesla_inc
-      # Add your sensors here or use a template/group
-    attribute: low_limit_reached
-    to: true
+  - platform: event
+    event_type: ghostfolio_limit_alert
 action:
-  - service: notify.mobile_app_my_phone
+  - service: notify.mobile_app
     data:
-      title: "Price Alert: {{ trigger.to_state.attributes.friendly_name }}"
-      message: "{{ trigger.to_state.attributes.friendly_name }} has dropped below your limit of {{ trigger.to_state.attributes.low_limit_set }}. Current value: {{ trigger.to_state.state }} {{ trigger.to_state.attributes.currency_base }}"
-```
-
-### 7. Advanced: Group Automation
-If you have many assets, listing every sensor in an automation trigger can be tedious. A more efficient approach is to create a **Group Helper** in Home Assistant.
-
-1. Create a new **Group** (Sensor Group) in Home Assistant settings and add all your Ghostfolio holding sensors to it.
-2. Use the following automation to monitor the entire group. This automation triggers whenever *any* member of the group changes state, checks which entity caused the change using `last_entity_id`, and sends a notification if that specific asset has reached its limit.
-
-```yaml
-alias: Ghostfolio Group Low Limit Notification
-description: >-
-  Monitors the Ghostfolio Holdings group and sends a notification when
-  any member reaches its set low limit.
-triggers:
-  - trigger: state
-    entity_id:
-      - sensor.ghostfolio_holdings_group
-    attribute: last_entity_id
-conditions:
-  - condition: template
-    value_template: >
-      {{ state_attr(trigger.to_state.attributes.last_entity_id, 'low_limit_reached') == true }}
-actions:
-  - action: notify.mobile_app_my_phone
-    data:
+      title: "Price Alert: {{ trigger.event.data.ticker }}"
       message: >-
-        Account: {{ state_attr(trigger.to_state.attributes.last_entity_id, 'account') }}
+        {{ trigger.event.data.ticker }} has hit the {{ trigger.event.data.limit_type }} limit of 
+        {{ trigger.event.data.limit_value }} {{ trigger.event.data.currency }}.
         
-        {{ state_attr(trigger.to_state.attributes.last_entity_id, 'friendly_name') }}
-        has hit the low limit of: 
-        {{ state_attr(trigger.to_state.attributes.last_entity_id, 'low_limit_set') }} 
-        {{ state_attr(trigger.to_state.attributes.last_entity_id, 'unit_of_measurement') }}
-mode: single
+        Current Price: {{ "%.2f" | format(trigger.event.data.current_value) }} {{ trigger.event.data.currency }}
+mode: parallel
 ```
+**Event Data Payload**: The event provides the following data variables you can use in your templates:
+- ticker: The symbol (e.g., "AAPL")
+- account: The account name or "Watchlist"
+- limit_type: "low" or "high"
+- limit_value: The threshold value that was set
+- current_value: The price that triggered the alert
+- currency: The currency code (e.g., "USD", "GBP")
 
-### 8. Diagnostic Sensors & Tools
+### 7. Diagnostic Sensors & Tools
 To help you troubleshoot issues and maintain your setup, the integration provides diagnostic entities. You can find these on the main Portfolio Device page in Home Assistant.
 
 - **Ghostfolio Server**: Indicates if your Ghostfolio instance is reachable (`Connected` / `Disconnected`).
