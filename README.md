@@ -78,6 +78,11 @@ When you set a value in these number entities, the corresponding main Sensor (Ho
 - **`low_limit_reached`**: Becomes `true` if the value drops to or below your limit.
 - **`high_limit_reached`**: Becomes `true` if the value rises to or above your limit.
 
+**Entity Organization:**
+These entities are grouped into **Devices** based on their Account (e.g., "ISA", "Watchlist").
+- **Friendly Name**: `AAPL - High Limit`
+- **Entity ID**: `number.isa_aapl_high_limit`
+
 ### 6. Using Price Alerts in Automations
 Because the alert logic is built directly into the sensors, you can create a single, powerful automation to handle notifications for ALL your assets at once, without needing to reference the number entities.
 
@@ -100,12 +105,41 @@ action:
       title: "Price Alert: {{ trigger.to_state.attributes.friendly_name }}"
       message: "{{ trigger.to_state.attributes.friendly_name }} has dropped below your limit of {{ trigger.to_state.attributes.low_limit_set }}. Current value: {{ trigger.to_state.state }} {{ trigger.to_state.attributes.currency_base }}"
 ```
-**Entity Organization:**
-These entities are grouped into **Devices** based on their Account (e.g., "ISA", "Watchlist").
-- **Friendly Name**: `AAPL - High Limit`
-- **Entity ID**: `number.isa_aapl_high_limit`
 
-### 6. Diagnostic Sensors & Tools
+### 7. Advanced: Group Automation
+If you have many assets, listing every sensor in an automation trigger can be tedious. A more efficient approach is to create a **Group Helper** in Home Assistant.
+
+1. Create a new **Group** (Sensor Group) in Home Assistant settings and add all your Ghostfolio holding sensors to it.
+2. Use the following automation to monitor the entire group. This automation triggers whenever *any* member of the group changes state, checks which entity caused the change using `last_entity_id`, and sends a notification if that specific asset has reached its limit.
+
+```yaml
+alias: Ghostfolio Group Low Limit Notification
+description: >-
+  Monitors the Ghostfolio Holdings group and sends a notification when
+  any member reaches its set low limit.
+triggers:
+  - trigger: state
+    entity_id:
+      - sensor.ghostfolio_holdings_group
+    attribute: last_entity_id
+conditions:
+  - condition: template
+    value_template: >
+      {{ state_attr(trigger.to_state.attributes.last_entity_id, 'low_limit_reached') == true }}
+actions:
+  - action: notify.mobile_app_my_phone
+    data:
+      message: >-
+        Account: {{ state_attr(trigger.to_state.attributes.last_entity_id, 'account') }}
+        
+        {{ state_attr(trigger.to_state.attributes.last_entity_id, 'friendly_name') }}
+        has hit the low limit of: 
+        {{ state_attr(trigger.to_state.attributes.last_entity_id, 'low_limit_set') }} 
+        {{ state_attr(trigger.to_state.attributes.last_entity_id, 'unit_of_measurement') }}
+mode: single
+```
+
+### 8. Diagnostic Sensors & Tools
 To help you troubleshoot issues and maintain your setup, the integration provides diagnostic entities. You can find these on the main Portfolio Device page in Home Assistant.
 
 - **Ghostfolio Server**: Indicates if your Ghostfolio instance is reachable (`Connected` / `Disconnected`).
