@@ -579,7 +579,7 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         entry_id = self.config_entry.entry_id
         safe_symbol = slugify(self.symbol)
         
-        # Helper to check a limit against CURRENT SENSOR VALUE (Total Value for Holdings)
+        # Helper to check a limit against MARKET PRICE (Unit Price)
         def get_limit_status(limit_type, compare_op):
             # Reconstruct the Number's unique ID
             # Pattern from number.py: ghostfolio_limit_{limit_type}_{account_id}_{safe_symbol}_{entry_id}
@@ -599,8 +599,10 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
                         limit_val = float(state_obj.state)
                         if limit_val > 0:
                             limit_display = limit_val
-                            if current_value_in_base > 0: 
-                                 if compare_op(current_value_in_base, limit_val):
+                            # CHANGED: Check against market_price_asset instead of current_value_in_base
+                            # This alerts on the STOCK PRICE, not the Total Value of the holding.
+                            if market_price_asset > 0: 
+                                 if compare_op(market_price_asset, limit_val):
                                      is_reached = True
                     except ValueError:
                         pass
