@@ -70,6 +70,59 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         self.api = api
         self.entry = entry
 
+    async def _enrich_item_with_market_data(self, item: dict) -> dict:
+        """Fetch market data to calculate 24h change and enrich an asset or watchlist item."""
+        symbol = item.get("symbol")
+        data_source = item.get("dataSource")
+        
+        if symbol and data_source:
+            try:
+                market_data_resp = await self.api.get_market_data(data_source, symbol)
+                history = market_data_resp.get("marketData", [])
+                
+                if history and isinstance(history, list) and len(history) > 0:
+                    latest_idx = -1
+                    max_lookback = 5
+                    lookback_count = 0
+                    
+                    current_entry = history[latest_idx]
+                    current_price = float(current_entry.get("marketPrice") or 0)
+
+                    while lookback_count < max_lookback and abs(latest_idx) < len(history):
+                        prev_idx = latest_idx - 1
+                        prev_entry = history[prev_idx]
+                        prev_price = float(prev_entry.get("marketPrice") or 0)
+                        if current_price != prev_price:
+                            break
+                        latest_idx -= 1
+                        lookback_count += 1
+                        current_entry = history[latest_idx]
+
+                    if abs(latest_idx - 1) <= len(history):
+                        prev_entry = history[latest_idx - 1]
+                        prev_price = float(prev_entry.get("marketPrice") or 0)
+                        if prev_price > 0:
+                            change_val = current_price - prev_price
+                            change_pct = (change_val / prev_price) * 100
+                            item["marketChange"] = change_val
+                            item["marketChangePercentage"] = change_pct
+                    
+                    # Ensure price and date exist
+                    if "marketPrice" not in item or not item["marketPrice"]:
+                        item["marketPrice"] = current_price
+                    item["marketDate"] = current_entry.get("date")
+                
+                profile = market_data_resp.get("assetProfile", {})
+                if not item.get("currency"):
+                    item["currency"] = profile.get("currency")
+                if not item.get("assetClass"):
+                    item["assetClass"] = profile.get("assetClass")
+                    
+            except Exception as err:
+                _LOGGER.debug(f"Failed to enrich item {symbol}: {err}")
+                
+        return item
+
     async def _async_update_data(self):
         """Fetch data from Ghostfolio API."""
         
@@ -120,7 +173,16 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                         # We fetch per account to ensure we know exactly which account the holding belongs to
                         holdings_data = await self.api.get_holdings(account_id=account_id)
                         # The API usually returns { "holdings": [...] }
-                        holdings_by_account[account_id] = holdings_data.get("holdings", [])
+                        raw_holdings = holdings_data.get("holdings", [])
+                        
+                        enriched_holdings = []
+                        for h in raw_holdings:
+                            # Only enrich active holdings to save API calls
+                            if float(h.get("quantity") or 0) > 0:
+                                h = await self._enrich_item_with_market_data(h)
+                            enriched_holdings.append(h)
+                            
+                        holdings_by_account[account_id] = enriched_holdings
                     except Exception as e:
                         _LOGGER.warning(f"Failed to fetch holdings for account {account['name']}: {e}")
 
@@ -137,54 +199,8 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                     
                     # Enrich watchlist items with Market Data (Price & Currency)
                     for item in raw_items:
-                        symbol = item.get("symbol")
-                        data_source = item.get("dataSource")
-                        
-                        if symbol and data_source:
-                            try:
-                                market_data_resp = await self.api.get_market_data(data_source, symbol)
-                                history = market_data_resp.get("marketData", [])
-                                
-                                if history and isinstance(history, list) and len(history) > 0:
-                                    latest_idx = -1
-                                    max_lookback = 5
-                                    lookback_count = 0
-                                    
-                                    current_entry = history[latest_idx]
-                                    current_price = float(current_entry.get("marketPrice") or 0)
-
-                                    while lookback_count < max_lookback and abs(latest_idx) < len(history):
-                                        prev_idx = latest_idx - 1
-                                        prev_entry = history[prev_idx]
-                                        prev_price = float(prev_entry.get("marketPrice") or 0)
-                                        if current_price != prev_price:
-                                            break
-                                        latest_idx -= 1
-                                        lookback_count += 1
-                                        current_entry = history[latest_idx]
-
-                                    if abs(latest_idx - 1) <= len(history):
-                                        prev_entry = history[latest_idx - 1]
-                                        prev_price = float(prev_entry.get("marketPrice") or 0)
-                                        if prev_price > 0:
-                                            change_val = current_price - prev_price
-                                            change_pct = (change_val / prev_price) * 100
-                                            item["marketChange"] = change_val
-                                            item["marketChangePercentage"] = change_pct
-                                    
-                                    item["marketPrice"] = current_price
-                                    item["marketDate"] = current_entry.get("date")
-                                
-                                profile = market_data_resp.get("assetProfile", {})
-                                if not item.get("currency"):
-                                    item["currency"] = profile.get("currency")
-                                if not item.get("assetClass"):
-                                    item["assetClass"] = profile.get("assetClass")
-                                    
-                            except Exception as err:
-                                _LOGGER.debug(f"Failed to enrich watchlist item {symbol}: {err}")
-                        
-                        watchlist_items.append(item)
+                        enriched_item = await self._enrich_item_with_market_data(item)
+                        watchlist_items.append(enriched_item)
                         
                 except Exception as e:
                     _LOGGER.warning(f"Failed to fetch watchlist: {e}")
