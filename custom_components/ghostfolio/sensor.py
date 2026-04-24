@@ -660,6 +660,13 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         current_value_in_base = float(data.get("valueInBaseCurrency") or data.get("value") or 0)
         market_price_asset = float(data.get("marketPrice") or 0)
 
+        # --- NEW: Market Change Logic ---
+        is_gbp_conversion = (asset_currency == "GBp")
+        raw_change = data.get("marketChange")
+        market_change = (raw_change / 100) if (is_gbp_conversion and raw_change is not None) else raw_change
+        market_change_pct = data.get("marketChangePercentage")
+        # --------------------------------
+
         # Calculations
         avg_buy_price_base = investment_in_base / quantity if quantity > 0 else 0
         market_price_base = current_value_in_base / quantity if quantity > 0 else 0
@@ -673,19 +680,17 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         else:
             trend = "break_even"
 
-        # --- LIMIT CHECK LOGIC (FIXED: Check against market_price_asset) ---
         low_val, low_reached, _ = self._get_limit_state("low", market_price_asset, lambda val, limit: val <= limit)
         high_val, high_reached, _ = self._get_limit_state("high", market_price_asset, lambda val, limit: val >= limit)
-        # -------------------------
 
         return {
             "ticker": self.symbol,
             "account": self.account_name,
             "number_of_shares": quantity,
-            "currency_asset": asset_currency,
+            "currency_asset": "GBP" if is_gbp_conversion else asset_currency,
             "currency_base": base_currency,
-            "market_price": market_price_asset,
-            "market_price_currency": asset_currency,
+            "market_price": (market_price_asset / 100) if is_gbp_conversion else market_price_asset,
+            "market_price_currency": "GBP" if is_gbp_conversion else asset_currency,
             "market_price_in_base_currency": round(market_price_base, 2),
             "average_buy_price": round(avg_buy_price_base, 2),
             "average_buy_price_currency": base_currency,
@@ -695,6 +700,8 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
             "trend_vs_buy": trend,
             "asset_class": data.get("assetClass"),
             "data_source": data.get("dataSource"),
+            "market_change_24h": market_change,                      
+            "market_change_pct_24h": market_change_pct,              
             # Limit Attributes
             "low_limit_set": low_val,
             "low_limit_reached": low_reached,
