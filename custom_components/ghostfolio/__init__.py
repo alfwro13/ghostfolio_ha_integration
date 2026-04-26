@@ -72,7 +72,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         self.api = api
         self.entry = entry
         
-        # --- Persistent Storage for Yahoo Fundamentals ---
         self._store = Store(hass, 1, f"{DOMAIN}_fundamentals_cache_{entry.entry_id}")
         self.fundamentals_cache = {}
         self.last_fundamentals_update = None
@@ -186,28 +185,25 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for account in accounts_list:
                 if account.get("isExcluded"):
                     continue
-                    
                 account_id = account["id"]
                 
                 try:
                     perf_data = await self.api.get_portfolio_performance(account_id=account_id)
                     account_performances[account_id] = perf_data
-                except Exception as e:
+                except Exception:
                     pass
 
                 if show_holdings:
                     try:
                         holdings_data = await self.api.get_holdings(account_id=account_id)
                         raw_holdings = holdings_data.get("holdings", [])
-                        
                         enriched_holdings = []
                         for h in raw_holdings:
                             if float(h.get("quantity") or 0) > 0:
                                 h = await self._enrich_item_with_market_data(h)
                             enriched_holdings.append(h)
-                            
                         holdings_by_account[account_id] = enriched_holdings
-                    except Exception as e:
+                    except Exception:
                         pass
 
             if show_watchlist:
@@ -222,7 +218,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                     for item in raw_items:
                         enriched_item = await self._enrich_item_with_market_data(item)
                         watchlist_items.append(enriched_item)
-                except Exception as e:
+                except Exception:
                     pass
 
             provider_results = {}
@@ -233,10 +229,9 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for res in health_results:
                 provider_results[res["code"]] = res
 
-            # --- Yahoo Finance Fundamentals Enrichment ---
-            if self.entry.data.get(CONF_SHOW_FUNDAMENTALS, True):
+            # --- Yahoo Finance Fundamentals Enrichment (Includes earningsTrend) ---
+            if self.entry.data.get(CONF_SHOW_FUNDAMENTALS, False):
                 now = dt_util.utcnow()
-                
                 if self.last_fundamentals_update is None or (now - self.last_fundamentals_update) > timedelta(hours=24):
                     _LOGGER.debug("Starting daily Fundamentals data fetch via Yahoo")
                     all_tickers = set()
@@ -257,6 +252,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
                             
                             for ticker in all_tickers:
+                                # MODIFIED: Added earningsTrend to modules list
                                 url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=defaultKeyStatistics,financialData,summaryDetail,earningsTrend"
                                 if crumb:
                                     url += f"&crumb={crumb}"
@@ -278,7 +274,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                                 "data": self.fundamentals_cache,
                                 "last_update": now.isoformat()
                             })
-                            
                         except Exception as e:
                             _LOGGER.error(f"Failed Fundamentals enrichment process: {e}")
 
@@ -329,7 +324,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         for account in accounts_list:
             if account.get("isExcluded"):
                 continue
-            
             account_id = account["id"]
             if show_accounts:
                 valid_unique_ids.add(f"ghostfolio_account_value_{account_id}_{entry_id}")
@@ -346,12 +340,10 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                     continue
                 account_id = account["id"]
                 holdings = all_holdings.get(account_id, [])
-                
                 for h in holdings:
                     if float(h.get("quantity") or 0) > 0:
                         symbol = h.get("symbol")
                         safe_symbol = slugify(symbol)
-                        
                         valid_unique_ids.add(f"ghostfolio_holding_{account_id}_{safe_symbol}_{entry_id}")
                         valid_unique_ids.add(f"ghostfolio_limit_low_{account_id}_{safe_symbol}_{entry_id}")
                         valid_unique_ids.add(f"ghostfolio_limit_high_{account_id}_{safe_symbol}_{entry_id}")
@@ -361,16 +353,16 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for item in watchlist:
                 symbol = item.get("symbol")
                 safe_symbol = slugify(symbol)
-                
                 valid_unique_ids.add(f"ghostfolio_watchlist_{safe_symbol}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_watchlist_limit_low_{safe_symbol}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_watchlist_limit_high_{safe_symbol}_{entry_id}")
 
-        if self.entry.data.get(CONF_SHOW_FUNDAMENTALS, True):
+        if self.entry.data.get(CONF_SHOW_FUNDAMENTALS, False):
             fund_payload = self.data.get("fundamentals_data", {})
             for symbol in fund_payload.keys():
                 safe_symbol = slugify(symbol)
                 valid_unique_ids.add(f"ghostfolio_fundamentals_{safe_symbol}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_valuation_{safe_symbol}_{entry_id}")
 
         for entity_entry in entries:
             if entity_entry.unique_id not in valid_unique_ids:
