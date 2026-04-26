@@ -12,6 +12,7 @@
           "show_accounts": "Show Individual Accounts",
           "show_holdings": "Show Holdings (One sensor per asset)",
           "show_watchlist": "Show Watchlist Items",
+          "fmp_api_key": "FMP API Key (Optional Enrichment)",
           "verify_ssl": "Verify SSL Certificate",
           "update_interval": "Update Interval"
         },
@@ -23,6 +24,7 @@
           "show_accounts": "Create sensors for each individual account found in Ghostfolio",
           "show_holdings": "Create individual sensors for every stock/asset you hold, grouped by account",
           "show_watchlist": "Create sensors for items in your Ghostfolio Watchlist",
+          "fmp_api_key": "Leave blank to disable. Enter your free API key from financialmodelingprep.com to add fundamental data (like PEG ratio) to your US stocks.",
           "verify_ssl": "Disable this if you're using corporate proxies like Zscaler that intercept SSL certificates",
           "update_interval": "How often to update portfolio data (in minutes, min: 1, max: 1440)"
         }
@@ -38,6 +40,7 @@
           "show_accounts": "Show Individual Accounts",
           "show_holdings": "Show Holdings (One sensor per asset)",
           "show_watchlist": "Show Watchlist Items",
+          "fmp_api_key": "FMP API Key (Optional Enrichment)",
           "verify_ssl": "Verify SSL Certificate",
           "update_interval": "Update Interval"
         },
@@ -49,6 +52,7 @@
           "show_accounts": "Create sensors for each individual account found in Ghostfolio",
           "show_holdings": "Create individual sensors for every stock/asset you hold, grouped by account",
           "show_watchlist": "Create sensors for items in your Ghostfolio Watchlist",
+          "fmp_api_key": "Leave blank to disable. Enter your free API key from financialmodelingprep.com to add fundamental data (like PEG ratio) to your US stocks.",
           "verify_ssl": "Disable this if you're using corporate proxies like Zscaler that intercept SSL certificates",
           "update_interval": "How often to update portfolio data (in minutes, min: 1, max: 1440)"
         }
