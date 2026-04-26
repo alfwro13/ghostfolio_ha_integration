@@ -12,7 +12,7 @@
           "show_accounts": "Show Individual Accounts",
           "show_holdings": "Show Holdings (One sensor per asset)",
           "show_watchlist": "Show Watchlist Items",
-          "show_fundamentals": "Show Fundamentals Enrichment",
+          "show_fundamentals": "Show Fundamentals (Yahoo Finance - Daily)",
           "verify_ssl": "Verify SSL Certificate",
           "update_interval": "Update Interval"
         },
@@ -40,7 +40,7 @@
           "show_accounts": "Show Individual Accounts",
           "show_holdings": "Show Holdings (One sensor per asset)",
           "show_watchlist": "Show Watchlist Items",
-          "show_fundamentals": "Show Fundamentals Enrichment",
+          "show_fundamentals": "Show Fundamentals (Yahoo Finance - Daily)",
           "verify_ssl": "Verify SSL Certificate",
           "update_interval": "Update Interval"
         },
@@ -69,40 +69,21 @@
   },
   "entity": {
     "sensor": {
-      "current_value": {
-        "name": "Portfolio Value"
-      },
-      "net_performance": {
-        "name": "Portfolio Gain"
-      },
-      "net_performance_percentage": {
-        "name": "Time-Weighted Return %"
-      },
-      "total_investment": {
-        "name": "Portfolio Cost"
-      },
-      "net_performance_with_currency": {
-        "name": "Portfolio Gain FX"
-      },
-      "net_performance_percentage_with_currency": {
-        "name": "Time-Weighted Return FX %"
-      },
-      "simple_gain_percentage": {
-        "name": "Simple Gain %"
-      }
+      "current_value": { "name": "Portfolio Value" },
+      "net_performance": { "name": "Portfolio Gain" },
+      "net_performance_percentage": { "name": "Time-Weighted Return %" },
+      "total_investment": { "name": "Portfolio Cost" },
+      "net_performance_with_currency": { "name": "Portfolio Gain FX" },
+      "net_performance_percentage_with_currency": { "name": "Time-Weighted Return FX %" },
+      "simple_gain_percentage": { "name": "Simple Gain %" }
     },
     "binary_sensor": {
       "data_provider": {
-        "state": {
-          "on": "Available",
-          "off": "Unavailable"
-        }
+        "state": { "on": "Available", "off": "Unavailable" }
       }
     },
     "button": {
-      "prune_orphans": {
-        "name": "Prune Orphaned Entities"
-      }
+      "prune_orphans": { "name": "Prune Orphaned Entities" }
     }
   }
 }
