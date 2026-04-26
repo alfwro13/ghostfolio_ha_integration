@@ -43,7 +43,7 @@ async def async_setup_entry(
     show_accounts = config_entry.data.get(CONF_SHOW_ACCOUNTS, True)
     show_holdings = config_entry.data.get(CONF_SHOW_HOLDINGS, True)
     show_watchlist = config_entry.data.get(CONF_SHOW_WATCHLIST, True)
-    show_fundamentals = config_entry.data.get(CONF_SHOW_FUNDAMENTALS, True)
+    show_fundamentals = config_entry.data.get(CONF_SHOW_FUNDAMENTALS, False)
 
     known_ids: set[str] = set()
 
@@ -64,13 +64,11 @@ async def async_setup_entry(
     @callback
     def _update_sensors():
         new_entities = []
-        
         accounts_data = coordinator.data.get("accounts", {}).get("accounts", [])
 
         for account in accounts_data:
             if account.get("isExcluded", False):
                 continue
-
             account_id = account["id"]
             account_name = account["name"]
 
@@ -83,7 +81,6 @@ async def async_setup_entry(
                     GhostfolioAccountTWRSensor(coordinator, config_entry, account),
                     GhostfolioAccountSimpleGainSensor(coordinator, config_entry, account),
                 ]
-                
                 for sens in account_sensors:
                     if sens.unique_id not in known_ids:
                         new_entities.append(sens)
@@ -92,22 +89,13 @@ async def async_setup_entry(
             if show_holdings:
                 holdings_map = coordinator.data.get("account_holdings", {})
                 holdings_list = holdings_map.get(account_id, [])
-
                 for holding in holdings_list:
                     if float(holding.get("quantity") or 0) > 0:
                         symbol = holding.get("symbol")
                         safe_symbol = slugify(symbol)
                         unique_id = f"ghostfolio_holding_{account_id}_{safe_symbol}_{config_entry.entry_id}"
-                        
                         if unique_id not in known_ids:
-                            sensor = GhostfolioHoldingSensor(
-                                coordinator, 
-                                config_entry, 
-                                account_id,   
-                                account_name, 
-                                holding
-                            )
-                            new_entities.append(sensor)
+                            new_entities.append(GhostfolioHoldingSensor(coordinator, config_entry, account_id, account_name, holding))
                             known_ids.add(unique_id)
 
         if show_watchlist:
@@ -116,22 +104,27 @@ async def async_setup_entry(
                 symbol = item.get("symbol")
                 safe_symbol = slugify(symbol)
                 unique_id = f"ghostfolio_watchlist_{safe_symbol}_{config_entry.entry_id}"
-                
                 if unique_id not in known_ids:
-                    sensor = GhostfolioWatchlistSensor(coordinator, config_entry, item)
-                    new_entities.append(sensor)
+                    new_entities.append(GhostfolioWatchlistSensor(coordinator, config_entry, item))
                     known_ids.add(unique_id)
 
+        # --- FUNDAMENTALS & VALUATION ---
         if show_fundamentals:
             fund_payload = coordinator.data.get("fundamentals_data", {})
             for symbol in fund_payload.keys():
                 safe_symbol = slugify(symbol)
-                unique_id = f"ghostfolio_fundamentals_{safe_symbol}_{config_entry.entry_id}"
                 
-                if unique_id not in known_ids:
-                    sensor = GhostfolioFundamentalsSensor(coordinator, config_entry, symbol)
-                    new_entities.append(sensor)
-                    known_ids.add(unique_id)
+                # 1. Fundamentals Sensor (State = Ticker)
+                fund_id = f"ghostfolio_fundamentals_{safe_symbol}_{config_entry.entry_id}"
+                if fund_id not in known_ids:
+                    new_entities.append(GhostfolioFundamentalsSensor(coordinator, config_entry, symbol))
+                    known_ids.add(fund_id)
+                
+                # 2. Valuation Sensor (State = Undervalued/Overpriced)
+                val_id = f"ghostfolio_valuation_{safe_symbol}_{config_entry.entry_id}"
+                if val_id not in known_ids:
+                    new_entities.append(GhostfolioValuationSensor(coordinator, config_entry, symbol))
+                    known_ids.add(val_id)
 
         if new_entities:
             async_add_entities(new_entities)
@@ -144,15 +137,11 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
     """Base class for Ghostfolio sensors."""
     _attr_has_entity_name = True
 
-    def __init__(
-        self, coordinator: GhostfolioDataUpdateCoordinator, config_entry: ConfigEntry
-    ) -> None:
+    def __init__(self, coordinator: GhostfolioDataUpdateCoordinator, config_entry: ConfigEntry) -> None:
         super().__init__(coordinator)
         self.config_entry = config_entry
         self.portfolio_name = config_entry.data.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
-
         device_id = f"ghostfolio_portfolio_{config_entry.entry_id}"
-
         self._attr_device_info = {
             "identifiers": {(DOMAIN, device_id)},
             "name": f"{self.portfolio_name} Portfolio",
@@ -162,53 +151,36 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_unit_of_measurement(self) -> str | None:
-        if not self.coordinator.data:
-            return "EUR"
-
-        accounts_payload = self.coordinator.data.get("accounts", {})
-        user_currency = accounts_payload.get("user", {}).get("baseCurrency")
-        if user_currency:
-            return user_currency
-
-        if "baseCurrency" in accounts_payload:
-            return accounts_payload["baseCurrency"]
-
-        accounts_list = accounts_payload.get("accounts", [])
-        if accounts_list and len(accounts_list) > 0:
-            return accounts_list[0].get("currency", "EUR")
-
+        if not self.coordinator.data: return "EUR"
+        payload = self.coordinator.data.get("accounts", {})
+        user_currency = payload.get("user", {}).get("baseCurrency")
+        if user_currency: return user_currency
+        if "baseCurrency" in payload: return payload["baseCurrency"]
+        accounts_list = payload.get("accounts", [])
+        if accounts_list: return accounts_list[0].get("currency", "EUR")
         return "EUR"
 
     @property
     def global_performance_data(self) -> dict[str, Any]:
-        if not self.coordinator.data:
-            return {}
+        if not self.coordinator.data: return {}
         return self.coordinator.data.get("global_performance", {}).get("performance", {})
 
     def _is_provider_down(self, data_source: str | None) -> bool:
-        if not data_source:
-            return False
-        if not self.coordinator.data:
-            return False
-            
+        if not data_source or not self.coordinator.data: return False
         providers = self.coordinator.data.get("providers", {})
-        provider_info = providers.get(data_source)
-        if provider_info and not provider_info.get("is_active", True):
-            return True
-        return False
+        info = providers.get(data_source)
+        return info and not info.get("is_active", True)
 
     @property
     def is_portfolio_healthy(self) -> bool:
-        if not self.coordinator.data:
-            return True
-        
+        if not self.coordinator.data: return True
         all_holdings = self.coordinator.data.get("account_holdings", {})
         for holdings in all_holdings.values():
             for h in holdings:
                 if float(h.get("quantity") or 0) > 0:
-                     if self._is_provider_down(h.get("dataSource")):
-                         return False
+                     if self._is_provider_down(h.get("dataSource")): return False
         return True
+
 
 # --- GLOBAL SENSORS ---
 
@@ -703,27 +675,48 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
 def _extract_yahoo_raw(data):
     """Recursively flatten Yahoo Finance dicts to grab the 'raw' float value."""
     out = {}
-    if not isinstance(data, dict):
-        return out
+    if not isinstance(data, dict): return out
     for k, v in data.items():
         if isinstance(v, dict):
-            if "raw" in v:
-                out[k] = v["raw"]
-            elif "fmt" in v:
-                out[k] = v["fmt"]
-        else:
-            out[k] = v
+            if "raw" in v: out[k] = v["raw"]
+            elif "fmt" in v: out[k] = v["fmt"]
+        else: out[k] = v
     return out
+
+def _calculate_lynch_peg(data):
+    """Calculate the Lynch PEG Ratio using 1y forward growth and dividend yield."""
+    try:
+        # 1. Forward P/E
+        fwd_pe = data.get("defaultKeyStatistics", {}).get("forwardPE", {}).get("raw")
+        
+        # 2. Dividend Yield
+        div_yield = data.get("summaryDetail", {}).get("dividendYield", {}).get("raw") or 0
+        
+        # 3. Projected 1y Growth (from earningsTrend)
+        # We look for the trend entry with period '+1y' or '1y'
+        trends = data.get("earningsTrend", {}).get("trend", [])
+        next_year_growth = None
+        for t in trends:
+            if t.get("period") in ["+1y", "1y"]:
+                next_year_growth = t.get("growth", {}).get("raw")
+                break
+        
+        if fwd_pe and next_year_growth:
+            # Lynch Math: PE / (Growth_Percentage + Yield_Percentage)
+            # Yahoo provides Growth/Yield as decimals (0.50 for 50%).
+            denominator = (next_year_growth * 100) + (div_yield * 100)
+            if denominator > 0:
+                return round(fwd_pe / denominator, 2)
+    except Exception:
+        pass
+    return None
 
 class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
     """Sensor for Yahoo Finance Fundamental Enrichment Data."""
-
     _attr_icon = "mdi:finance"
     
-    # State is a string, so we explicitly drop numerical unit boundaries
     @property
-    def native_unit_of_measurement(self) -> str | None:
-        return None
+    def native_unit_of_measurement(self) -> str | None: return None
 
     def __init__(self, coordinator, config_entry, symbol):
         super().__init__(coordinator, config_entry)
@@ -733,7 +726,6 @@ class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
         self._attr_unique_id = f"ghostfolio_fundamentals_{safe_symbol}_{config_entry.entry_id}"
         self._attr_name = f"{self.symbol} Fundamentals"
 
-        # EXPLICIT FIX: Map it to a brand new isolated "Fundamentals" Device
         self._attr_device_info = {
             "identifiers": {(DOMAIN, f"ghostfolio_device_fundamentals_{config_entry.entry_id}")},
             "name": "Fundamentals", 
@@ -744,12 +736,10 @@ class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
 
     @property
     def native_value(self) -> str:
-        # EXPLICIT FIX: Make the sensor state the Ticker Symbol
         return self.symbol
 
     @property
     def extra_state_attributes(self) -> dict | None:
-        # Pull the data generated by __init__.py 
         data_cache = self.coordinator.data.get("fundamentals_data", {})
         data = data_cache.get(self.symbol, {})
         last_update = self.coordinator.last_fundamentals_update
@@ -762,16 +752,76 @@ class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
         if not data:
             return attrs
             
-        # Extract the raw numbers from the massive Yahoo payload
+        # Calculate and explicitly expose the requested attributes at the top
+        lynch_peg = _calculate_lynch_peg(data)
+        attrs["lynch_peg_ratio"] = lynch_peg
+        attrs["standard_peg_ratio"] = data.get("defaultKeyStatistics", {}).get("pegRatio", {}).get("raw")
+        attrs["forward_pe"] = data.get("defaultKeyStatistics", {}).get("forwardPE", {}).get("raw")
+        attrs["dividend_yield"] = data.get("summaryDetail", {}).get("dividendYield", {}).get("raw")
+        
+        trends = data.get("earningsTrend", {}).get("trend", [])
+        for t in trends:
+            if t.get("period") in ["+1y", "1y"]:
+                attrs["projected_1y_growth"] = t.get("growth", {}).get("raw")
+                break
+
+        # Flatten and add the rest of the Yahoo payload safely
         stats = _extract_yahoo_raw(data.get("defaultKeyStatistics", {}))
         fin = _extract_yahoo_raw(data.get("financialData", {}))
         summary = _extract_yahoo_raw(data.get("summaryDetail", {}))
         
-        # Dump everything into the attributes mapping
         attrs.update(stats)
         attrs.update(summary)
         attrs.update(fin)
         
-        # Clean up any leftover dictionaries that HA will complain about
-        clean_attrs = {k: v for k, v in attrs.items() if not isinstance(v, (dict, list))}
-        return clean_attrs
+        return {k: v for k, v in attrs.items() if not isinstance(v, (dict, list))}
+
+class GhostfolioValuationSensor(GhostfolioBaseSensor):
+    """Sensor to display valuation status based on Lynch PEG Ratio."""
+    _attr_icon = "mdi:gauge"
+
+    @property
+    def native_unit_of_measurement(self) -> str | None: return None
+
+    def __init__(self, coordinator, config_entry, symbol):
+        super().__init__(coordinator, config_entry)
+        self.symbol = symbol
+        safe_symbol = slugify(self.symbol)
+        
+        self._attr_unique_id = f"ghostfolio_valuation_{safe_symbol}_{config_entry.entry_id}"
+        self._attr_name = f"{self.symbol} Valuation"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, f"ghostfolio_device_fundamentals_{config_entry.entry_id}")},
+            "name": "Fundamentals", 
+            "manufacturer": "Yahoo Finance",
+            "model": "Fundamental Tracking",
+            "via_device": (DOMAIN, f"ghostfolio_portfolio_{config_entry.entry_id}"),
+        }
+
+    @property
+    def native_value(self) -> str | None:
+        data_cache = self.coordinator.data.get("fundamentals_data", {})
+        data = data_cache.get(self.symbol, {})
+        if not data:
+            return "unknown"
+        
+        lynch_peg = _calculate_lynch_peg(data)
+        if lynch_peg is None:
+            return "unknown"
+        
+        if lynch_peg < 1.0:
+            return "undervalued"
+        if lynch_peg > 2.0:
+            return "overpriced"
+        
+        return "fairly_valued"
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        data_cache = self.coordinator.data.get("fundamentals_data", {})
+        data = data_cache.get(self.symbol, {})
+        return {
+            "ticker": self.symbol,
+            "lynch_peg_ratio": _calculate_lynch_peg(data) if data else None,
+            "valuation_rule": "Lynch PEG: <1 Undervalued, >2 Overpriced"
+        }
