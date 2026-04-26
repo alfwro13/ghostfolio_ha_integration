@@ -23,7 +23,7 @@ from .const import (
     CONF_SHOW_ACCOUNTS,
     CONF_SHOW_HOLDINGS,
     CONF_SHOW_WATCHLIST,
-    CONF_FMP_API_KEY,
+    CONF_SHOW_FUNDAMENTALS,
     DOMAIN,
     DATA_PROVIDERS
 )
@@ -72,11 +72,29 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         self.api = api
         self.entry = entry
         
-        # --- Persistent Storage Setup ---
-        self._store = Store(hass, 1, f"{DOMAIN}_fmp_cache_{entry.entry_id}")
-        self.fmp_data_cache = {}
-        self.last_fmp_update = None
+        # --- Persistent Storage for Yahoo Fundamentals ---
+        self._store = Store(hass, 1, f"{DOMAIN}_fundamentals_cache_{entry.entry_id}")
+        self.fundamentals_cache = {}
+        self.last_fundamentals_update = None
         self._cache_loaded = False
+        self._yahoo_crumb = None
+
+    async def _get_yahoo_crumb(self, session):
+        """Fetch Yahoo Finance crumb to bypass API restrictions."""
+        if self._yahoo_crumb:
+            return self._yahoo_crumb
+            
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        try:
+            async with session.get("https://fc.yahoo.com", headers=headers, allow_redirects=True) as resp:
+                pass
+            async with session.get("https://query1.finance.yahoo.com/v1/test/getcrumb", headers=headers) as resp:
+                if resp.status == 200:
+                    self._yahoo_crumb = await resp.text()
+                    return self._yahoo_crumb
+        except Exception as e:
+            _LOGGER.debug(f"Yahoo crumb fetch failed: {e}")
+        return None
 
     async def _enrich_item_with_market_data(self, item: dict) -> dict:
         """Fetch market data to calculate 24h change and enrich an asset or watchlist item."""
@@ -133,14 +151,13 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Fetch data from Ghostfolio API."""
         
-        # Load the persistent cache from disk on the very first run
         if not self._cache_loaded:
             stored_data = await self._store.async_load()
             if stored_data:
-                self.fmp_data_cache = stored_data.get("data", {})
+                self.fundamentals_cache = stored_data.get("data", {})
                 last_update_str = stored_data.get("last_update")
                 if last_update_str:
-                    self.last_fmp_update = dt_util.parse_datetime(last_update_str)
+                    self.last_fundamentals_update = dt_util.parse_datetime(last_update_str)
             self._cache_loaded = True
 
         data = {
@@ -151,7 +168,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             "account_holdings": {},
             "watchlist": [],
             "providers": {},
-            "fmp_data": self.fmp_data_cache
+            "fundamentals_data": self.fundamentals_cache
         }
 
         try:
@@ -216,50 +233,54 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for res in health_results:
                 provider_results[res["code"]] = res
 
-            # --- Persistent FMP Enrichment Logic ---
-            fmp_api_key = self.entry.data.get(CONF_FMP_API_KEY)
-            if fmp_api_key:
+            # --- Yahoo Finance Fundamentals Enrichment ---
+            if self.entry.data.get(CONF_SHOW_FUNDAMENTALS, True):
                 now = dt_util.utcnow()
                 
-                # Check if it has been 24 hours since the last successful disk save
-                if self.last_fmp_update is None or (now - self.last_fmp_update) > timedelta(hours=24):
-                    _LOGGER.debug("Starting daily FMP data enrichment fetch")
-                    us_tickers = set()
+                if self.last_fundamentals_update is None or (now - self.last_fundamentals_update) > timedelta(hours=24):
+                    _LOGGER.debug("Starting daily Fundamentals data fetch via Yahoo")
+                    all_tickers = set()
 
                     for acc_holdings in holdings_by_account.values():
                         for h in acc_holdings:
-                            if float(h.get("quantity") or 0) > 0 and "." not in h.get("symbol", "."):
-                                us_tickers.add(h.get("symbol"))
+                            if float(h.get("quantity") or 0) > 0 and h.get("symbol"):
+                                all_tickers.add(h.get("symbol"))
 
                     for w in watchlist_items:
-                        if "." not in w.get("symbol", "."):
-                            us_tickers.add(w.get("symbol"))
+                        if w.get("symbol"):
+                            all_tickers.add(w.get("symbol"))
 
-                    if us_tickers:
+                    if all_tickers:
                         try:
                             session = self.api._get_session()
-                            for ticker in us_tickers:
-                                url = f"https://financialmodelingprep.com/stable/ratios-ttm?symbol={ticker}&apikey={fmp_api_key}"
-                                try:
-                                    async with session.get(url) as response:
-                                        if response.status == 200:
-                                            fmp_resp = await response.json()
-                                            if fmp_resp and isinstance(fmp_resp, list) and len(fmp_resp) > 0:
-                                                self.fmp_data_cache[ticker] = fmp_resp[0]
-                                except Exception as inner_e:
-                                    _LOGGER.error(f"Failed to fetch FMP data for {ticker}: {inner_e}")
-                                
-                                await asyncio.sleep(0.3)
+                            crumb = await self._get_yahoo_crumb(session)
+                            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
                             
-                            # Success! Update the time and save to Hard Drive
-                            self.last_fmp_update = now
+                            for ticker in all_tickers:
+                                url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=defaultKeyStatistics,financialData,summaryDetail"
+                                if crumb:
+                                    url += f"&crumb={crumb}"
+                                
+                                try:
+                                    async with session.get(url, headers=headers) as response:
+                                        if response.status == 200:
+                                            resp_json = await response.json()
+                                            res = resp_json.get("quoteSummary", {}).get("result", [])
+                                            if res:
+                                                self.fundamentals_cache[ticker] = res[0]
+                                except Exception as inner_e:
+                                    _LOGGER.debug(f"Failed to fetch Yahoo data for {ticker}: {inner_e}")
+                                
+                                await asyncio.sleep(0.5)
+                            
+                            self.last_fundamentals_update = now
                             await self._store.async_save({
-                                "data": self.fmp_data_cache,
+                                "data": self.fundamentals_cache,
                                 "last_update": now.isoformat()
                             })
                             
                         except Exception as e:
-                            _LOGGER.error(f"Failed FMP enrichment process: {e}")
+                            _LOGGER.error(f"Failed Fundamentals enrichment process: {e}")
 
             data["server_online"] = True
             data["accounts"] = accounts_data
@@ -268,7 +289,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             data["account_holdings"] = holdings_by_account
             data["watchlist"] = watchlist_items
             data["providers"] = provider_results
-            data["fmp_data"] = self.fmp_data_cache
+            data["fundamentals_data"] = self.fundamentals_cache
             
             return data
 
@@ -279,7 +300,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
     async def async_prune_orphans(self) -> None:
         """Remove entities that no longer exist in Ghostfolio."""
         if not self.data or not self.data.get("server_online", False):
-            _LOGGER.warning("Cannot prune entities while Ghostfolio is offline.")
             return
 
         entity_registry = er.async_get(self.hass)
@@ -346,18 +366,12 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 valid_unique_ids.add(f"ghostfolio_watchlist_limit_low_{safe_symbol}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_watchlist_limit_high_{safe_symbol}_{entry_id}")
 
-        fmp_key = self.entry.data.get(CONF_FMP_API_KEY)
-        if fmp_key:
-            fmp_payload = self.data.get("fmp_data", {})
-            for symbol in fmp_payload.keys():
+        if self.entry.data.get(CONF_SHOW_FUNDAMENTALS, True):
+            fund_payload = self.data.get("fundamentals_data", {})
+            for symbol in fund_payload.keys():
                 safe_symbol = slugify(symbol)
-                valid_unique_ids.add(f"ghostfolio_fmp_{safe_symbol}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_fundamentals_{safe_symbol}_{entry_id}")
 
-        removed_count = 0
         for entity_entry in entries:
             if entity_entry.unique_id not in valid_unique_ids:
-                _LOGGER.info(f"Removing orphaned entity: {entity_entry.entity_id} (unique_id: {entity_entry.unique_id})")
                 entity_registry.async_remove(entity_entry.entity_id)
-                removed_count += 1
-        
-        _LOGGER.info(f"Prune complete. Removed {removed_count} orphaned entities.")
