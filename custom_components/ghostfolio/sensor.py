@@ -24,7 +24,7 @@ from .const import (
     CONF_SHOW_ACCOUNTS,
     CONF_SHOW_HOLDINGS,
     CONF_SHOW_WATCHLIST,
-    CONF_FMP_API_KEY,
+    CONF_SHOW_FUNDAMENTALS,
     DOMAIN,
 )
 
@@ -43,10 +43,10 @@ async def async_setup_entry(
     show_accounts = config_entry.data.get(CONF_SHOW_ACCOUNTS, True)
     show_holdings = config_entry.data.get(CONF_SHOW_HOLDINGS, True)
     show_watchlist = config_entry.data.get(CONF_SHOW_WATCHLIST, True)
+    show_fundamentals = config_entry.data.get(CONF_SHOW_FUNDAMENTALS, True)
 
     known_ids: set[str] = set()
 
-    # 1. Add Global Portfolio Sensors
     if show_totals:
         global_sensors = [
             GhostfolioCurrentValueSensor(coordinator, config_entry),
@@ -63,10 +63,8 @@ async def async_setup_entry(
 
     @callback
     def _update_sensors():
-        """Check for new sensors (accounts, holdings, watchlist) and add them."""
         new_entities = []
         
-        # --- ACCOUNTS & HOLDINGS ---
         accounts_data = coordinator.data.get("accounts", {}).get("accounts", [])
 
         for account in accounts_data:
@@ -76,7 +74,6 @@ async def async_setup_entry(
             account_id = account["id"]
             account_name = account["name"]
 
-            # A. Add Per-Account Sensors
             if show_accounts:
                 account_sensors = [
                     GhostfolioAccountValueSensor(coordinator, config_entry, account),
@@ -92,7 +89,6 @@ async def async_setup_entry(
                         new_entities.append(sens)
                         known_ids.add(sens.unique_id)
 
-            # B. Add Per-Holding Sensors
             if show_holdings:
                 holdings_map = coordinator.data.get("account_holdings", {})
                 holdings_list = holdings_map.get(account_id, [])
@@ -114,7 +110,6 @@ async def async_setup_entry(
                             new_entities.append(sensor)
                             known_ids.add(unique_id)
 
-        # --- WATCHLIST ---
         if show_watchlist:
             watchlist_items = coordinator.data.get("watchlist", [])
             for item in watchlist_items:
@@ -127,16 +122,14 @@ async def async_setup_entry(
                     new_entities.append(sensor)
                     known_ids.add(unique_id)
 
-        # --- FMP SENSORS ---
-        fmp_key = config_entry.data.get(CONF_FMP_API_KEY)
-        if fmp_key:
-            fmp_payload = coordinator.data.get("fmp_data", {})
-            for symbol in fmp_payload.keys():
+        if show_fundamentals:
+            fund_payload = coordinator.data.get("fundamentals_data", {})
+            for symbol in fund_payload.keys():
                 safe_symbol = slugify(symbol)
-                unique_id = f"ghostfolio_fmp_{safe_symbol}_{config_entry.entry_id}"
+                unique_id = f"ghostfolio_fundamentals_{safe_symbol}_{config_entry.entry_id}"
                 
                 if unique_id not in known_ids:
-                    sensor = GhostfolioFMPSensor(coordinator, config_entry, symbol)
+                    sensor = GhostfolioFundamentalsSensor(coordinator, config_entry, symbol)
                     new_entities.append(sensor)
                     known_ids.add(unique_id)
 
@@ -149,13 +142,11 @@ async def async_setup_entry(
 
 class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
     """Base class for Ghostfolio sensors."""
-
     _attr_has_entity_name = True
 
     def __init__(
         self, coordinator: GhostfolioDataUpdateCoordinator, config_entry: ConfigEntry
     ) -> None:
-        """Initialize the sensor."""
         super().__init__(coordinator)
         self.config_entry = config_entry
         self.portfolio_name = config_entry.data.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
@@ -171,7 +162,6 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_unit_of_measurement(self) -> str | None:
-        """Dynamically return the portfolio base currency."""
         if not self.coordinator.data:
             return "EUR"
 
@@ -191,15 +181,11 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def global_performance_data(self) -> dict[str, Any]:
-        """Helper to get global performance data safely."""
         if not self.coordinator.data:
             return {}
-        return self.coordinator.data.get("global_performance", {}).get(
-            "performance", {}
-        )
+        return self.coordinator.data.get("global_performance", {}).get("performance", {})
 
     def _is_provider_down(self, data_source: str | None) -> bool:
-        """Check if a specific data source is down."""
         if not data_source:
             return False
         if not self.coordinator.data:
@@ -213,7 +199,6 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def is_portfolio_healthy(self) -> bool:
-        """Return False if ANY active holding in the portfolio uses a down provider."""
         if not self.coordinator.data:
             return True
         
@@ -225,7 +210,6 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
                          return False
         return True
 
-
 # --- GLOBAL SENSORS ---
 
 class GhostfolioCurrentValueSensor(GhostfolioBaseSensor):
@@ -233,21 +217,16 @@ class GhostfolioCurrentValueSensor(GhostfolioBaseSensor):
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
-
     def __init__(self, coordinator, config_entry):
         super().__init__(coordinator, config_entry)
         self._attr_unique_id = f"ghostfolio_current_value_{config_entry.entry_id}"
-
     @property
     def native_value(self) -> float | None:
-        if not self.is_portfolio_healthy:
-            return None
+        if not self.is_portfolio_healthy: return None
         return self.global_performance_data.get("currentValueInBaseCurrency")
-
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        if not self.coordinator.data:
-            return None
+        if not self.coordinator.data: return None
         return {"current_net_worth": self.global_performance_data.get("currentNetWorth")}
 
 class GhostfolioNetPerformanceSensor(GhostfolioBaseSensor):
@@ -255,15 +234,12 @@ class GhostfolioNetPerformanceSensor(GhostfolioBaseSensor):
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
-
     def __init__(self, coordinator, config_entry):
         super().__init__(coordinator, config_entry)
         self._attr_unique_id = f"ghostfolio_net_performance_{config_entry.entry_id}"
-
     @property
     def native_value(self) -> float | None:
-        if not self.is_portfolio_healthy:
-            return None
+        if not self.is_portfolio_healthy: return None
         return self.global_performance_data.get("netPerformance")
 
 class GhostfolioTimeWeightedReturnSensor(GhostfolioBaseSensor):
@@ -271,19 +247,15 @@ class GhostfolioTimeWeightedReturnSensor(GhostfolioBaseSensor):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 2
-
     def __init__(self, coordinator, config_entry):
         super().__init__(coordinator, config_entry)
         self._attr_unique_id = f"ghostfolio_net_performance_percent_{config_entry.entry_id}"
-
     @property
     def native_unit_of_measurement(self) -> str | None:
         return PERCENTAGE
-
     @property
     def native_value(self) -> float | None:
-        if not self.is_portfolio_healthy:
-            return None
+        if not self.is_portfolio_healthy: return None
         percent_value = self.global_performance_data.get("netPerformancePercentage")
         return round(percent_value * 100, 2) if percent_value is not None else None
 
@@ -292,15 +264,12 @@ class GhostfolioTotalInvestmentSensor(GhostfolioBaseSensor):
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
-
     def __init__(self, coordinator, config_entry):
         super().__init__(coordinator, config_entry)
         self._attr_unique_id = f"ghostfolio_total_investment_{config_entry.entry_id}"
-
     @property
     def native_value(self) -> float | None:
-        if not self.is_portfolio_healthy:
-            return None
+        if not self.is_portfolio_healthy: return None
         return self.global_performance_data.get("totalInvestment")
 
 class GhostfolioTimeWeightedReturnFXSensor(GhostfolioBaseSensor):
@@ -308,19 +277,15 @@ class GhostfolioTimeWeightedReturnFXSensor(GhostfolioBaseSensor):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 2
-
     def __init__(self, coordinator, config_entry):
         super().__init__(coordinator, config_entry)
         self._attr_unique_id = f"ghostfolio_net_performance_percent_with_currency_{config_entry.entry_id}"
-
     @property
     def native_unit_of_measurement(self) -> str | None:
         return PERCENTAGE
-
     @property
     def native_value(self) -> float | None:
-        if not self.is_portfolio_healthy:
-            return None
+        if not self.is_portfolio_healthy: return None
         percent_value = self.global_performance_data.get("netPerformancePercentageWithCurrencyEffect")
         return round(percent_value * 100, 2) if percent_value is not None else None
 
@@ -329,15 +294,12 @@ class GhostfolioNetPerformanceWithCurrencySensor(GhostfolioBaseSensor):
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
-
     def __init__(self, coordinator, config_entry):
         super().__init__(coordinator, config_entry)
         self._attr_unique_id = f"ghostfolio_net_performance_with_currency_{config_entry.entry_id}"
-
     @property
     def native_value(self) -> float | None:
-        if not self.is_portfolio_healthy:
-            return None
+        if not self.is_portfolio_healthy: return None
         return self.global_performance_data.get("netPerformanceWithCurrencyEffect")
 
 class GhostfolioSimpleGainPercentSensor(GhostfolioBaseSensor):
@@ -345,36 +307,27 @@ class GhostfolioSimpleGainPercentSensor(GhostfolioBaseSensor):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 2
-
     def __init__(self, coordinator, config_entry):
         super().__init__(coordinator, config_entry)
         self._attr_unique_id = f"ghostfolio_simple_gain_percent_{config_entry.entry_id}"
-
     @property
     def native_unit_of_measurement(self) -> str | None:
         return PERCENTAGE
-
     @property
     def native_value(self) -> float | None:
-        if not self.is_portfolio_healthy:
-            return None
+        if not self.is_portfolio_healthy: return None
         current_value = self.global_performance_data.get("currentValueInBaseCurrency")
         total_investment = self.global_performance_data.get("totalInvestment")
-        if current_value is None or total_investment is None or total_investment == 0:
-            return None
+        if current_value is None or total_investment is None or total_investment == 0: return None
         return round(((current_value - total_investment) / total_investment) * 100, 2)
-
 
 # --- PER-ACCOUNT SENSORS ---
 
 class GhostfolioAccountBaseSensor(GhostfolioBaseSensor):
-    """Base class for Account-specific sensors."""
-
     def __init__(self, coordinator, config_entry, account_data):
         super().__init__(coordinator, config_entry)
         self.account_id = account_data["id"]
         self.account_name = account_data["name"]
-        
         self._attr_device_info = {
             "identifiers": {(DOMAIN, f"ghostfolio_account_{self.account_id}_{config_entry.entry_id}")},
             "name": self.account_name, 
@@ -382,110 +335,87 @@ class GhostfolioAccountBaseSensor(GhostfolioBaseSensor):
             "model": "Account Portfolio",
             "via_device": (DOMAIN, f"ghostfolio_portfolio_{config_entry.entry_id}"),
         }
-
     @property
     def account_performance_data(self) -> dict[str, Any]:
-        if not self.coordinator.data:
-            return {}
+        if not self.coordinator.data: return {}
         performances = self.coordinator.data.get("account_performances", {})
         return performances.get(self.account_id, {}).get("performance", {})
-
     @property
     def is_account_healthy(self) -> bool:
-        if not self.coordinator.data:
-            return True
-
+        if not self.coordinator.data: return True
         all_holdings = self.coordinator.data.get("account_holdings", {})
         account_holdings = all_holdings.get(self.account_id, [])
-        
         for h in account_holdings:
             if float(h.get("quantity") or 0) > 0:
-                 if self._is_provider_down(h.get("dataSource")):
-                     return False
+                 if self._is_provider_down(h.get("dataSource")): return False
         return True
 
 class GhostfolioAccountValueSensor(GhostfolioAccountBaseSensor):
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
-
     def __init__(self, coordinator, config_entry, account_data):
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_value_{self.account_id}_{config_entry.entry_id}"
         self._attr_name = f"{self.account_name} Value"
-
     @property
     def native_value(self) -> float | None:
-        if not self.is_account_healthy:
-            return None
+        if not self.is_account_healthy: return None
         return self.account_performance_data.get("currentValueInBaseCurrency")
 
 class GhostfolioAccountNetWorthSensor(GhostfolioAccountBaseSensor):
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
-
     def __init__(self, coordinator, config_entry, account_data):
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_net_worth_{self.account_id}_{config_entry.entry_id}"
         self._attr_name = f"{self.account_name} Net Worth"
-
     @property
     def native_value(self) -> float | None:
-        if not self.is_account_healthy:
-            return None
+        if not self.is_account_healthy: return None
         return self.account_performance_data.get("currentNetWorth")
 
 class GhostfolioAccountCostSensor(GhostfolioAccountBaseSensor):
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
-
     def __init__(self, coordinator, config_entry, account_data):
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_cost_{self.account_id}_{config_entry.entry_id}"
         self._attr_name = f"{self.account_name} Cost"
-
     @property
     def native_value(self) -> float | None:
-        if not self.is_account_healthy:
-            return None
+        if not self.is_account_healthy: return None
         return self.account_performance_data.get("totalInvestment")
 
 class GhostfolioAccountPerformanceSensor(GhostfolioAccountBaseSensor):
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
-
     def __init__(self, coordinator, config_entry, account_data):
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_perf_{self.account_id}_{config_entry.entry_id}"
         self._attr_name = f"{self.account_name} Gain"
-
     @property
     def native_value(self) -> float | None:
-        if not self.is_account_healthy:
-            return None
+        if not self.is_account_healthy: return None
         return self.account_performance_data.get("netPerformance")
 
 class GhostfolioAccountTWRSensor(GhostfolioAccountBaseSensor):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 2
-
     def __init__(self, coordinator, config_entry, account_data):
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_perf_pct_{self.account_id}_{config_entry.entry_id}"
         self._attr_name = f"{self.account_name} Time-Weighted Return %"
-
     @property
     def native_unit_of_measurement(self) -> str | None:
         return PERCENTAGE
-
     @property
     def native_value(self) -> float | None:
-        if not self.is_account_healthy:
-            return None
+        if not self.is_account_healthy: return None
         percent_value = self.account_performance_data.get("netPerformancePercentage")
         return round(percent_value * 100, 2) if percent_value is not None else None
 
@@ -493,36 +423,27 @@ class GhostfolioAccountSimpleGainSensor(GhostfolioAccountBaseSensor):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 2
-
     def __init__(self, coordinator, config_entry, account_data):
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_simple_gain_{self.account_id}_{config_entry.entry_id}"
         self._attr_name = f"{self.account_name} Simple Gain %"
-
     @property
     def native_unit_of_measurement(self) -> str | None:
         return PERCENTAGE
-
     @property
     def native_value(self) -> float | None:
-        if not self.is_account_healthy:
-            return None
+        if not self.is_account_healthy: return None
         current_value = self.account_performance_data.get("currentValueInBaseCurrency")
         total_investment = self.account_performance_data.get("totalInvestment")
-        if current_value is None or total_investment is None or total_investment == 0:
-            return None
+        if current_value is None or total_investment is None or total_investment == 0: return None
         return round(((current_value - total_investment) / total_investment) * 100, 2)
-
 
 # --- PER-HOLDING SENSORS ---
 
 class GhostfolioHoldingSensor(GhostfolioBaseSensor):
-    """Sensor for a specific Asset/Holding."""
-
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
-
     def __init__(self, coordinator, config_entry, account_id, account_name, holding_data):
         super().__init__(coordinator, config_entry)
         self.account_id = account_id
@@ -541,7 +462,6 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
             "model": "Account Portfolio",
             "via_device": (DOMAIN, f"ghostfolio_portfolio_{config_entry.entry_id}"),
         }
-        
         self._prev_low_reached = False
         self._prev_high_reached = False
 
@@ -555,38 +475,29 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
 
     @property
     def holding_data(self) -> dict[str, Any] | None:
-        if not self.coordinator.data:
-            return None
+        if not self.coordinator.data: return None
         holdings_map = self.coordinator.data.get("account_holdings", {})
         holdings_list = holdings_map.get(self.account_id, [])
         for h in holdings_list:
-            if h.get("symbol") == self.symbol:
-                return h
+            if h.get("symbol") == self.symbol: return h
         return None
 
     @property
     def native_value(self) -> float | None:
         data = self.holding_data
-        if not data:
-            return None
-            
-        if self._is_provider_down(data.get("dataSource")):
-             return None
-
+        if not data: return None
+        if self._is_provider_down(data.get("dataSource")): return None
         return data.get("valueInBaseCurrency") or data.get("value")
 
     def _get_limit_state(self, limit_type: str, current_value: float, compare_op):
         registry = er.async_get(self.hass)
         safe_symbol = slugify(self.symbol)
         entry_id = self.config_entry.entry_id
-        
         num_unique_id = f"ghostfolio_limit_{limit_type}_{self.account_id}_{safe_symbol}_{entry_id}"
         entity_id = registry.async_get_entity_id("number", DOMAIN, num_unique_id)
-        
         limit_display = False 
         is_reached = False
         limit_val = 0.0
-        
         if entity_id:
             state_obj = self.hass.states.get(entity_id)
             if state_obj and state_obj.state not in [None, "unknown", "unavailable"]:
@@ -595,53 +506,33 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
                     if limit_val > 0:
                         limit_display = limit_val
                         if current_value > 0: 
-                                if compare_op(current_value, limit_val):
-                                    is_reached = True
+                                if compare_op(current_value, limit_val): is_reached = True
                 except ValueError:
                     pass
         return limit_display, is_reached, limit_val
 
     def _check_and_fire_events(self):
         data = self.holding_data
-        if not data:
-            return
-
+        if not data: return
         current_price = float(data.get("marketPrice") or 0)
         currency_asset = data.get("currency")
         
         low_disp, low_reached, low_val = self._get_limit_state("low", current_price, lambda val, limit: val <= limit)
         if low_reached and not self._prev_low_reached:
-            self.hass.bus.async_fire("ghostfolio_limit_alert", {
-                "ticker": self.symbol,
-                "account": self.account_name,
-                "limit_type": "low",
-                "limit_value": low_val,
-                "current_value": current_price,
-                "currency": currency_asset
-            })
+            self.hass.bus.async_fire("ghostfolio_limit_alert", {"ticker": self.symbol, "account": self.account_name, "limit_type": "low", "limit_value": low_val, "current_value": current_price, "currency": currency_asset})
         self._prev_low_reached = low_reached
 
         high_disp, high_reached, high_val = self._get_limit_state("high", current_price, lambda val, limit: val >= limit)
         if high_reached and not self._prev_high_reached:
-            self.hass.bus.async_fire("ghostfolio_limit_alert", {
-                "ticker": self.symbol,
-                "account": self.account_name,
-                "limit_type": "high",
-                "limit_value": high_val,
-                "current_value": current_price,
-                "currency": currency_asset
-            })
+            self.hass.bus.async_fire("ghostfolio_limit_alert", {"ticker": self.symbol, "account": self.account_name, "limit_type": "high", "limit_value": high_val, "current_value": current_price, "currency": currency_asset})
         self._prev_high_reached = high_reached
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         data = self.holding_data
-        if not data:
-            return None
-
+        if not data: return None
         asset_currency = data.get("currency")
         base_currency = self.native_unit_of_measurement
-
         quantity = float(data.get("quantity") or 0)
         investment_in_base = float(data.get("investment") or 0)
         current_value_in_base = float(data.get("valueInBaseCurrency") or data.get("value") or 0)
@@ -657,12 +548,9 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         gain_value_base = current_value_in_base - investment_in_base
         gain_pct = (gain_value_base / investment_in_base * 100) if investment_in_base > 0 else 0
 
-        if market_price_base > avg_buy_price_base:
-            trend = "up"
-        elif market_price_base < avg_buy_price_base:
-            trend = "down"
-        else:
-            trend = "break_even"
+        trend = "break_even"
+        if market_price_base > avg_buy_price_base: trend = "up"
+        elif market_price_base < avg_buy_price_base: trend = "down"
 
         low_val, low_reached, _ = self._get_limit_state("low", market_price_asset, lambda val, limit: val <= limit)
         high_val, high_reached, _ = self._get_limit_state("high", market_price_asset, lambda val, limit: val >= limit)
@@ -692,22 +580,15 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
             "high_limit_reached": high_reached,
         }
 
-
-# --- WATCHLIST SENSORS ---
-
 class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
-    """Sensor for a Watchlist Item."""
-
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
-
     def __init__(self, coordinator, config_entry, item_data):
         super().__init__(coordinator, config_entry)
         self.symbol = item_data.get("symbol")
         self.data_source = item_data.get("dataSource")
         self.ticker_name = item_data.get("name", self.symbol)
-
         safe_symbol = slugify(self.symbol)
         self._attr_unique_id = f"ghostfolio_watchlist_{safe_symbol}_{config_entry.entry_id}"
         self._attr_name = self.ticker_name
@@ -719,7 +600,6 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
             "model": "Account Portfolio",
             "via_device": (DOMAIN, f"ghostfolio_portfolio_{config_entry.entry_id}"),
         }
-        
         self._prev_low_reached = False
         self._prev_high_reached = False
 
@@ -727,56 +607,39 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
     def _handle_coordinator_update(self) -> None:
         self._check_and_fire_events()
         super()._handle_coordinator_update()
-
     async def async_update(self) -> None:
         self._check_and_fire_events()
-
     @property
     def item_data(self) -> dict[str, Any] | None:
-        if not self.coordinator.data:
-            return None
+        if not self.coordinator.data: return None
         watchlist = self.coordinator.data.get("watchlist", [])
         for item in watchlist:
-            if item.get("symbol") == self.symbol and item.get("dataSource") == self.data_source:
-                return item
+            if item.get("symbol") == self.symbol and item.get("dataSource") == self.data_source: return item
         return None
-
     @property
     def native_value(self) -> float | None:
         data = self.item_data
-        if not data:
-            return None
-            
-        if self._is_provider_down(self.data_source):
-             return None
-
+        if not data: return None
+        if self._is_provider_down(self.data_source): return None
         val = data.get("marketPrice")
-        if data.get("currency") == "GBp" and val is not None:
-            return val / 100
-
+        if data.get("currency") == "GBp" and val is not None: return val / 100
         return val
-
     @property
     def native_unit_of_measurement(self) -> str | None:
         data = self.item_data
-        if not data:
-            return None
-        if data.get("currency") == "GBp":
-            return "GBP"
+        if not data: return None
+        if data.get("currency") == "GBp": return "GBP"
         return data.get("currency")
 
     def _get_limit_state(self, limit_type: str, current_value: float, compare_op):
         registry = er.async_get(self.hass)
         safe_symbol = slugify(self.symbol)
         entry_id = self.config_entry.entry_id
-        
         num_unique_id = f"ghostfolio_watchlist_limit_{limit_type}_{safe_symbol}_{entry_id}"
         entity_id = registry.async_get_entity_id("number", DOMAIN, num_unique_id)
-        
         limit_display = False 
         is_reached = False
         limit_val = 0.0
-        
         if entity_id:
             state_obj = self.hass.states.get(entity_id)
             if state_obj and state_obj.state not in [None, "unknown", "unavailable"]:
@@ -785,17 +648,14 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
                     if limit_val > 0:
                         limit_display = limit_val
                         if current_value > 0: 
-                                if compare_op(current_value, limit_val):
-                                    is_reached = True
+                                if compare_op(current_value, limit_val): is_reached = True
                 except ValueError:
                     pass
         return limit_display, is_reached, limit_val
 
     def _check_and_fire_events(self):
         data = self.item_data
-        if not data:
-            return
-
+        if not data: return
         is_gbp_conversion = (data.get("currency") == "GBp")
         raw_price = data.get("marketPrice") or 0
         current_price = (raw_price / 100) if is_gbp_conversion else raw_price
@@ -803,44 +663,25 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
 
         low_disp, low_reached, low_val = self._get_limit_state("low", current_price, lambda val, limit: val <= limit)
         if low_reached and not self._prev_low_reached:
-            self.hass.bus.async_fire("ghostfolio_limit_alert", {
-                "ticker": self.symbol,
-                "account": "Watchlist",
-                "limit_type": "low",
-                "limit_value": low_val,
-                "current_value": current_price,
-                "currency": currency
-            })
+            self.hass.bus.async_fire("ghostfolio_limit_alert", {"ticker": self.symbol, "account": "Watchlist", "limit_type": "low", "limit_value": low_val, "current_value": current_price, "currency": currency})
         self._prev_low_reached = low_reached
 
         high_disp, high_reached, high_val = self._get_limit_state("high", current_price, lambda val, limit: val >= limit)
         if high_reached and not self._prev_high_reached:
-            self.hass.bus.async_fire("ghostfolio_limit_alert", {
-                "ticker": self.symbol,
-                "account": "Watchlist",
-                "limit_type": "high",
-                "limit_value": high_val,
-                "current_value": current_price,
-                "currency": currency
-            })
+            self.hass.bus.async_fire("ghostfolio_limit_alert", {"ticker": self.symbol, "account": "Watchlist", "limit_type": "high", "limit_value": high_val, "current_value": current_price, "currency": currency})
         self._prev_high_reached = high_reached
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         data = self.item_data
-        if not data:
-            return None
-        
+        if not data: return None
         is_gbp_conversion = (data.get("currency") == "GBp")
         raw_price = data.get("marketPrice") or 0
         current_price = (raw_price / 100) if is_gbp_conversion else raw_price
-        
         raw_change = data.get("marketChange")
         market_change = (raw_change / 100) if (is_gbp_conversion and raw_change is not None) else raw_change
-
         low_val, low_reached, _ = self._get_limit_state("low", current_price, lambda val, limit: val <= limit)
         high_val, high_reached, _ = self._get_limit_state("high", current_price, lambda val, limit: val >= limit)
-
         return {
             "ticker": self.symbol,
             "data_source": self.data_source,
@@ -859,13 +700,27 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
 
 # --- ENRICHMENT SENSORS ---
 
-class GhostfolioFMPSensor(GhostfolioBaseSensor):
-    """Sensor for Financial Modeling Prep Enrichment Data."""
+def _extract_yahoo_raw(data):
+    """Recursively flatten Yahoo Finance dicts to grab the 'raw' float value."""
+    out = {}
+    if not isinstance(data, dict):
+        return out
+    for k, v in data.items():
+        if isinstance(v, dict):
+            if "raw" in v:
+                out[k] = v["raw"]
+            elif "fmt" in v:
+                out[k] = v["fmt"]
+        else:
+            out[k] = v
+    return out
+
+class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
+    """Sensor for Yahoo Finance Fundamental Enrichment Data."""
 
     _attr_icon = "mdi:finance"
-    _attr_state_class = SensorStateClass.MEASUREMENT
-
-    # EXPLICIT FIX: Override the inherited currency so HA doesn't block the sensor
+    
+    # State is a string, so we explicitly drop numerical unit boundaries
     @property
     def native_unit_of_measurement(self) -> str | None:
         return None
@@ -873,47 +728,50 @@ class GhostfolioFMPSensor(GhostfolioBaseSensor):
     def __init__(self, coordinator, config_entry, symbol):
         super().__init__(coordinator, config_entry)
         self.symbol = symbol
-        
         safe_symbol = slugify(self.symbol)
-        self._attr_unique_id = f"ghostfolio_fmp_{safe_symbol}_{config_entry.entry_id}"
+        
+        self._attr_unique_id = f"ghostfolio_fundamentals_{safe_symbol}_{config_entry.entry_id}"
         self._attr_name = f"{self.symbol} Fundamentals"
 
-    @property
-    def fmp_data(self) -> dict | None:
-        if not self.coordinator.data:
-            return None
-        return self.coordinator.data.get("fmp_data", {}).get(self.symbol)
+        # EXPLICIT FIX: Map it to a brand new isolated "Fundamentals" Device
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, f"ghostfolio_device_fundamentals_{config_entry.entry_id}")},
+            "name": "Fundamentals", 
+            "manufacturer": "Yahoo Finance",
+            "model": "Fundamental Tracking",
+            "via_device": (DOMAIN, f"ghostfolio_portfolio_{config_entry.entry_id}"),
+        }
 
     @property
-    def native_value(self) -> float | None:
-        data = self.fmp_data
-        if not data:
-            return None
-        
-        peg = data.get("priceToEarningsGrowthRatioTTM")
-        
-        # EXPLICIT FIX: Catch value errors if FMP returns an empty string for a stock
-        try:
-            if peg is not None and str(peg).strip() != "":
-                return round(float(peg), 2)
-        except (ValueError, TypeError):
-            pass
-            
-        return None
+    def native_value(self) -> str:
+        # EXPLICIT FIX: Make the sensor state the Ticker Symbol
+        return self.symbol
 
     @property
     def extra_state_attributes(self) -> dict | None:
-        data = self.fmp_data
-        if not data:
-            return None
+        # Pull the data generated by __init__.py 
+        data_cache = self.coordinator.data.get("fundamentals_data", {})
+        data = data_cache.get(self.symbol, {})
+        last_update = self.coordinator.last_fundamentals_update
         
-        return {
+        attrs = {
             "ticker": self.symbol,
-            "pe_ratio_ttm": data.get("priceToEarningsRatioTTM"),
-            "pb_ratio_ttm": data.get("priceToBookRatioTTM"),
-            "ps_ratio_ttm": data.get("priceToSalesRatioTTM"),
-            "dividend_yield_ttm": data.get("dividendYieldTTM"),
-            "net_profit_margin_ttm": data.get("netProfitMarginTTM"),
-            "debt_to_equity_ttm": data.get("debtToEquityRatioTTM"),
-            "free_cash_flow_per_share_ttm": data.get("freeCashFlowPerShareTTM"),
+            "data_pulled_at": last_update.isoformat() if last_update else None,
         }
+        
+        if not data:
+            return attrs
+            
+        # Extract the raw numbers from the massive Yahoo payload
+        stats = _extract_yahoo_raw(data.get("defaultKeyStatistics", {}))
+        fin = _extract_yahoo_raw(data.get("financialData", {}))
+        summary = _extract_yahoo_raw(data.get("summaryDetail", {}))
+        
+        # Dump everything into the attributes mapping
+        attrs.update(stats)
+        attrs.update(summary)
+        attrs.update(fin)
+        
+        # Clean up any leftover dictionaries that HA will complain about
+        clean_attrs = {k: v for k, v in attrs.items() if not isinstance(v, (dict, list))}
+        return clean_attrs
