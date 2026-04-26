@@ -1,4 +1,4 @@
-"""Constants for the Ghostfolio integration."""
+# custom_components/ghostfolio/const.py
 
 DOMAIN = "ghostfolio"
 
@@ -12,7 +12,8 @@ CONF_SHOW_TOTALS = "show_totals"
 CONF_SHOW_ACCOUNTS = "show_accounts"
 CONF_SHOW_HOLDINGS = "show_holdings"
 CONF_SHOW_WATCHLIST = "show_watchlist"
-CONF_FMP_API_KEY = "fmp_api_key"
+# --- CHANGED LINE BELOW ---
+CONF_FMP_API_KEY = "optional_fmp_api_key" 
 
 # Default values
 DEFAULT_NAME = "Ghostfolio"
