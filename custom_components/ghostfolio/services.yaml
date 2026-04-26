@@ -1,0 +1,3 @@
+refresh_fundamentals:
+  name: "Refresh Fundamentals"
+  description: "Forces the Ghostfolio integration to bypass the 24-hour cache and immediately pull fresh fundamental data from Yahoo Finance."
