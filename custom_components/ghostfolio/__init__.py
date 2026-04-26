@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -11,8 +11,9 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
-
 
 from .api import GhostfolioAPI
 from .const import (
@@ -22,6 +23,7 @@ from .const import (
     CONF_SHOW_ACCOUNTS,
     CONF_SHOW_HOLDINGS,
     CONF_SHOW_WATCHLIST,
+    CONF_SHOW_FUNDAMENTALS,
     DOMAIN,
     DATA_PROVIDERS
 )
@@ -48,6 +50,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    # --- Register Custom Service for On-Demand Refresh ---
+    async def refresh_fundamentals(call):
+        """Force a refresh of Yahoo Finance fundamentals."""
+        for e in hass.config_entries.async_entries(DOMAIN):
+            if hasattr(e, "runtime_data"):
+                coord = e.runtime_data
+                if isinstance(coord, GhostfolioDataUpdateCoordinator):
+                    _LOGGER.info("Forcing on-demand refresh of Yahoo Fundamentals")
+                    coord.last_fundamentals_update = None  # Reset the 24h timer
+                    await coord.async_request_refresh()
+
+    if not hass.services.has_service(DOMAIN, "refresh_fundamentals"):
+        hass.services.async_register(DOMAIN, "refresh_fundamentals", refresh_fundamentals)
+
     return True
 
 
@@ -69,6 +85,29 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         )
         self.api = api
         self.entry = entry
+        
+        self._store = Store(hass, 1, f"{DOMAIN}_fundamentals_cache_{entry.entry_id}")
+        self.fundamentals_cache = {}
+        self.last_fundamentals_update = None
+        self._cache_loaded = False
+        self._yahoo_crumb = None
+
+    async def _get_yahoo_crumb(self, session):
+        """Fetch Yahoo Finance crumb to bypass API restrictions."""
+        if self._yahoo_crumb:
+            return self._yahoo_crumb
+            
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        try:
+            async with session.get("https://fc.yahoo.com", headers=headers, allow_redirects=True) as resp:
+                pass
+            async with session.get("https://query1.finance.yahoo.com/v1/test/getcrumb", headers=headers) as resp:
+                if resp.status == 200:
+                    self._yahoo_crumb = await resp.text()
+                    return self._yahoo_crumb
+        except Exception as e:
+            _LOGGER.debug(f"Yahoo crumb fetch failed: {e}")
+        return None
 
     async def _enrich_item_with_market_data(self, item: dict) -> dict:
         """Fetch market data to calculate 24h change and enrich an asset or watchlist item."""
@@ -107,7 +146,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                             item["marketChange"] = change_val
                             item["marketChangePercentage"] = change_pct
                     
-                    # Ensure price and date exist
                     if "marketPrice" not in item or not item["marketPrice"]:
                         item["marketPrice"] = current_price
                     item["marketDate"] = current_entry.get("date")
@@ -126,7 +164,15 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Fetch data from Ghostfolio API."""
         
-        # Initialize default "Offline" data structure
+        if not self._cache_loaded:
+            stored_data = await self._store.async_load()
+            if stored_data:
+                self.fundamentals_cache = stored_data.get("data", {})
+                last_update_str = stored_data.get("last_update")
+                if last_update_str:
+                    self.last_fundamentals_update = dt_util.parse_datetime(last_update_str)
+            self._cache_loaded = True
+
         data = {
             "server_online": False,
             "accounts": {},
@@ -134,78 +180,61 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             "account_performances": {},
             "account_holdings": {},
             "watchlist": [],
-            "providers": {}
+            "providers": {},
+            "fundamentals_data": self.fundamentals_cache
         }
 
         try:
-            # 1. Fetch List of Accounts
             accounts_data = await self.api.get_accounts()
             accounts_list = accounts_data.get("accounts", [])
-            
-            # 2. Fetch Global Portfolio Performance
             global_performance = await self.api.get_portfolio_performance()
             
-            # 3. Fetch Data per Account
             account_performances = {}
             holdings_by_account = {}
             watchlist_items = []
             
-            # Check config options
             show_holdings = self.entry.data.get(CONF_SHOW_HOLDINGS, True)
             show_watchlist = self.entry.data.get(CONF_SHOW_WATCHLIST, True)
 
             for account in accounts_list:
                 if account.get("isExcluded"):
                     continue
-                    
                 account_id = account["id"]
                 
-                # A. Fetch Performance
                 try:
                     perf_data = await self.api.get_portfolio_performance(account_id=account_id)
                     account_performances[account_id] = perf_data
-                except Exception as e:
-                    _LOGGER.warning(f"Failed to fetch performance for account {account['name']}: {e}")
+                except Exception:
+                    pass
 
-                # B. Fetch Holdings (if enabled)
                 if show_holdings:
                     try:
-                        # We fetch per account to ensure we know exactly which account the holding belongs to
                         holdings_data = await self.api.get_holdings(account_id=account_id)
-                        # The API usually returns { "holdings": [...] }
                         raw_holdings = holdings_data.get("holdings", [])
-                        
                         enriched_holdings = []
                         for h in raw_holdings:
-                            # Only enrich active holdings to save API calls
                             if float(h.get("quantity") or 0) > 0:
                                 h = await self._enrich_item_with_market_data(h)
                             enriched_holdings.append(h)
-                            
                         holdings_by_account[account_id] = enriched_holdings
-                    except Exception as e:
-                        _LOGGER.warning(f"Failed to fetch holdings for account {account['name']}: {e}")
+                    except Exception:
+                        pass
 
-            # 4. Fetch Watchlist (if enabled)
             if show_watchlist:
                 try:
                     wl_response = await self.api.get_watchlist()
-                    # Handle response being list or dict depending on API version
                     raw_items = []
                     if isinstance(wl_response, list):
                         raw_items = wl_response
                     elif isinstance(wl_response, dict):
                         raw_items = wl_response.get("watchlist", []) or wl_response.get("items", [])
                     
-                    # Enrich watchlist items with Market Data (Price & Currency)
                     for item in raw_items:
                         enriched_item = await self._enrich_item_with_market_data(item)
                         watchlist_items.append(enriched_item)
-                        
-                except Exception as e:
-                    _LOGGER.warning(f"Failed to fetch watchlist: {e}")
+                except Exception:
+                    pass
 
-            # 5. Fetch Provider Health (Parallel)
             provider_results = {}
             async def _fetch_health(code):
                 return await self.api.get_provider_health(code)
@@ -214,7 +243,53 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for res in health_results:
                 provider_results[res["code"]] = res
 
-            # --- SUCCESS ---
+            # --- Yahoo Finance Fundamentals Enrichment ---
+            if self.entry.data.get(CONF_SHOW_FUNDAMENTALS, False):
+                now = dt_util.utcnow()
+                if self.last_fundamentals_update is None or (now - self.last_fundamentals_update) > timedelta(hours=24):
+                    _LOGGER.debug("Starting daily Fundamentals data fetch via Yahoo")
+                    all_tickers = set()
+
+                    for acc_holdings in holdings_by_account.values():
+                        for h in acc_holdings:
+                            if float(h.get("quantity") or 0) > 0 and h.get("symbol"):
+                                all_tickers.add(h.get("symbol"))
+
+                    for w in watchlist_items:
+                        if w.get("symbol"):
+                            all_tickers.add(w.get("symbol"))
+
+                    if all_tickers:
+                        try:
+                            session = self.api._get_session()
+                            crumb = await self._get_yahoo_crumb(session)
+                            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                            
+                            for ticker in all_tickers:
+                                url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=defaultKeyStatistics,financialData,summaryDetail,earningsTrend"
+                                if crumb:
+                                    url += f"&crumb={crumb}"
+                                
+                                try:
+                                    async with session.get(url, headers=headers) as response:
+                                        if response.status == 200:
+                                            resp_json = await response.json()
+                                            res = resp_json.get("quoteSummary", {}).get("result", [])
+                                            if res:
+                                                self.fundamentals_cache[ticker] = res[0]
+                                except Exception as inner_e:
+                                    _LOGGER.debug(f"Failed to fetch Yahoo data for {ticker}: {inner_e}")
+                                
+                                await asyncio.sleep(0.5)
+                            
+                            self.last_fundamentals_update = now
+                            await self._store.async_save({
+                                "data": self.fundamentals_cache,
+                                "last_update": now.isoformat()
+                            })
+                        except Exception as e:
+                            _LOGGER.error(f"Failed Fundamentals enrichment process: {e}")
+
             data["server_online"] = True
             data["accounts"] = accounts_data
             data["global_performance"] = global_performance
@@ -222,6 +297,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             data["account_holdings"] = holdings_by_account
             data["watchlist"] = watchlist_items
             data["providers"] = provider_results
+            data["fundamentals_data"] = self.fundamentals_cache
             
             return data
 
@@ -232,7 +308,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
     async def async_prune_orphans(self) -> None:
         """Remove entities that no longer exist in Ghostfolio."""
         if not self.data or not self.data.get("server_online", False):
-            _LOGGER.warning("Cannot prune entities while Ghostfolio is offline.")
             return
 
         entity_registry = er.async_get(self.hass)
@@ -241,7 +316,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         valid_unique_ids = set()
         entry_id = self.entry.entry_id
         
-        # 1. Global Sensors
         if self.entry.data.get(CONF_SHOW_TOTALS, True):
             valid_unique_ids.add(f"ghostfolio_current_value_{entry_id}")
             valid_unique_ids.add(f"ghostfolio_net_performance_{entry_id}")
@@ -251,71 +325,58 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             valid_unique_ids.add(f"ghostfolio_net_performance_with_currency_{entry_id}")
             valid_unique_ids.add(f"ghostfolio_simple_gain_percent_{entry_id}")
 
-        # 2. Binary Sensors (Server + Providers)
         valid_unique_ids.add(f"ghostfolio_server_status_{entry_id}")
         for provider in DATA_PROVIDERS:
             valid_unique_ids.add(f"ghostfolio_provider_{provider.lower()}_{entry_id}")
 
-        # 3. Prune Button
         valid_unique_ids.add(f"ghostfolio_prune_button_{entry_id}")
 
-        # 4. Accounts
         show_accounts = self.entry.data.get(CONF_SHOW_ACCOUNTS, True)
         accounts_list = self.data.get("accounts", {}).get("accounts", [])
         
         for account in accounts_list:
             if account.get("isExcluded"):
                 continue
-            
             account_id = account["id"]
             if show_accounts:
                 valid_unique_ids.add(f"ghostfolio_account_value_{account_id}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_account_net_worth_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_cost_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_perf_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_perf_pct_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_simple_gain_{account_id}_{entry_id}")
 
-        # 5. Holdings (Sensors + Numbers)
         if self.entry.data.get(CONF_SHOW_HOLDINGS, True):
             all_holdings = self.data.get("account_holdings", {})
-            # Need to iterate per account to match the ID generation logic
             for account in accounts_list:
                 if account.get("isExcluded"):
                     continue
                 account_id = account["id"]
                 holdings = all_holdings.get(account_id, [])
-                
                 for h in holdings:
-                    # Only active holdings generate sensors
                     if float(h.get("quantity") or 0) > 0:
                         symbol = h.get("symbol")
                         safe_symbol = slugify(symbol)
-                        
-                        # Sensor
                         valid_unique_ids.add(f"ghostfolio_holding_{account_id}_{safe_symbol}_{entry_id}")
-                        # Numbers
                         valid_unique_ids.add(f"ghostfolio_limit_low_{account_id}_{safe_symbol}_{entry_id}")
                         valid_unique_ids.add(f"ghostfolio_limit_high_{account_id}_{safe_symbol}_{entry_id}")
 
-        # 6. Watchlist (Sensors + Numbers)
         if self.entry.data.get(CONF_SHOW_WATCHLIST, True):
             watchlist = self.data.get("watchlist", [])
             for item in watchlist:
                 symbol = item.get("symbol")
                 safe_symbol = slugify(symbol)
-                
-                # Sensor
                 valid_unique_ids.add(f"ghostfolio_watchlist_{safe_symbol}_{entry_id}")
-                # Numbers
                 valid_unique_ids.add(f"ghostfolio_watchlist_limit_low_{safe_symbol}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_watchlist_limit_high_{safe_symbol}_{entry_id}")
 
-        # Execute Prune
-        removed_count = 0
+        if self.entry.data.get(CONF_SHOW_FUNDAMENTALS, False):
+            fund_payload = self.data.get("fundamentals_data", {})
+            for symbol in fund_payload.keys():
+                safe_symbol = slugify(symbol)
+                valid_unique_ids.add(f"ghostfolio_fundamentals_{safe_symbol}_{entry_id}")
+                # Removed the Valuation Unique ID
+
         for entity_entry in entries:
             if entity_entry.unique_id not in valid_unique_ids:
-                _LOGGER.info(f"Removing orphaned entity: {entity_entry.entity_id} (unique_id: {entity_entry.unique_id})")
                 entity_registry.async_remove(entity_entry.entity_id)
-                removed_count += 1
-        
-        _LOGGER.info(f"Prune complete. Removed {removed_count} orphaned entities.")
