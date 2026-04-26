@@ -676,13 +676,17 @@ def _extract_yahoo_raw(data):
         else: out[k] = v
     return out
 
-def _calculate_lynch_peg(data):
+def _calculate_lynch_peg(data, is_pence_glitch=False):
     """Calculate the Lynch PEG Ratio using 1y forward growth and dividend yield."""
     try:
         # Fallback to summaryDetail if defaultKeyStatistics doesn't have it
         fwd_pe = data.get("defaultKeyStatistics", {}).get("forwardPE", {}).get("raw")
         if fwd_pe is None:
             fwd_pe = data.get("summaryDetail", {}).get("forwardPE", {}).get("raw")
+            
+        # FIX: Correct the Pence Glitch inflation
+        if is_pence_glitch and fwd_pe is not None:
+            fwd_pe = fwd_pe / 100.0
             
         div_yield = data.get("summaryDetail", {}).get("dividendYield", {}).get("raw") or 0
         
@@ -745,8 +749,13 @@ class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
         if not data:
             return attrs
             
+        # --- 0. Detect the "Pence Glitch" ---
+        currency = data.get("summaryDetail", {}).get("currency") or data.get("financialData", {}).get("currency")
+        fin_currency = data.get("financialData", {}).get("financialCurrency")
+        is_pence_glitch = (currency == "GBp" and fin_currency == "GBP")
+
         # --- 1. Valuation & Lynch Logic ---
-        lynch_peg = _calculate_lynch_peg(data)
+        lynch_peg = _calculate_lynch_peg(data, is_pence_glitch)
         attrs["lynch_peg_ratio"] = lynch_peg
         
         if lynch_peg is None:
@@ -764,6 +773,11 @@ class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
         fwd_pe = data.get("defaultKeyStatistics", {}).get("forwardPE", {}).get("raw")
         if fwd_pe is None:
             fwd_pe = data.get("summaryDetail", {}).get("forwardPE", {}).get("raw")
+            
+        # FIX: Correct the exposed Forward P/E
+        if is_pence_glitch and fwd_pe is not None:
+            fwd_pe = round(fwd_pe / 100.0, 4)
+            
         attrs["forward_pe"] = fwd_pe
         
         attrs["dividend_yield"] = data.get("summaryDetail", {}).get("dividendYield", {}).get("raw")
@@ -780,6 +794,15 @@ class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
         stats = _extract_yahoo_raw(data.get("defaultKeyStatistics", {}))
         fin = _extract_yahoo_raw(data.get("financialData", {}))
         summary = _extract_yahoo_raw(data.get("summaryDetail", {}))
+        
+        # FIX: Correct other heavily distorted price-to-earnings/book ratios in the raw dump
+        if is_pence_glitch:
+            if "forwardPE" in stats and stats["forwardPE"] is not None:
+                stats["forwardPE"] = round(stats["forwardPE"] / 100.0, 4)
+            if "priceToBook" in stats and stats["priceToBook"] is not None:
+                stats["priceToBook"] = round(stats["priceToBook"] / 100.0, 4)
+            if "trailingPE" in summary and summary["trailingPE"] is not None:
+                summary["trailingPE"] = round(summary["trailingPE"] / 100.0, 4)
         
         attrs.update(stats)
         attrs.update(summary)
