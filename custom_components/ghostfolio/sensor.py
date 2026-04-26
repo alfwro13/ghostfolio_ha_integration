@@ -865,6 +865,11 @@ class GhostfolioFMPSensor(GhostfolioBaseSensor):
     _attr_icon = "mdi:finance"
     _attr_state_class = SensorStateClass.MEASUREMENT
 
+    # EXPLICIT FIX: Override the inherited currency so HA doesn't block the sensor
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        return None
+
     def __init__(self, coordinator, config_entry, symbol):
         super().__init__(coordinator, config_entry)
         self.symbol = symbol
@@ -884,8 +889,17 @@ class GhostfolioFMPSensor(GhostfolioBaseSensor):
         data = self.fmp_data
         if not data:
             return None
+        
         peg = data.get("priceToEarningsGrowthRatioTTM")
-        return round(float(peg), 2) if peg is not None else None
+        
+        # EXPLICIT FIX: Catch value errors if FMP returns an empty string for a stock
+        try:
+            if peg is not None and str(peg).strip() != "":
+                return round(float(peg), 2)
+        except (ValueError, TypeError):
+            pass
+            
+        return None
 
     @property
     def extra_state_attributes(self) -> dict | None:
