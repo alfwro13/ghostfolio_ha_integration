@@ -257,7 +257,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
                             
                             for ticker in all_tickers:
-                                url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=defaultKeyStatistics,financialData,summaryDetail"
+                                url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=defaultKeyStatistics,financialData,summaryDetail,earningsTrend"
                                 if crumb:
                                     url += f"&crumb={crumb}"
                                 
