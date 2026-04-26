@@ -24,6 +24,7 @@ from .const import (
     CONF_SHOW_ACCOUNTS,
     CONF_SHOW_HOLDINGS,
     CONF_SHOW_WATCHLIST,
+    CONF_FMP_API_KEY,
     DOMAIN,
 )
 
@@ -79,7 +80,7 @@ async def async_setup_entry(
             if show_accounts:
                 account_sensors = [
                     GhostfolioAccountValueSensor(coordinator, config_entry, account),
-                    GhostfolioAccountNetWorthSensor(coordinator, config_entry, account),  # <--- NEW SENSOR ADDED HERE
+                    GhostfolioAccountNetWorthSensor(coordinator, config_entry, account),
                     GhostfolioAccountCostSensor(coordinator, config_entry, account),
                     GhostfolioAccountPerformanceSensor(coordinator, config_entry, account),
                     GhostfolioAccountTWRSensor(coordinator, config_entry, account),
@@ -97,7 +98,6 @@ async def async_setup_entry(
                 holdings_list = holdings_map.get(account_id, [])
 
                 for holding in holdings_list:
-                    # Ensure valid holding with quantity
                     if float(holding.get("quantity") or 0) > 0:
                         symbol = holding.get("symbol")
                         safe_symbol = slugify(symbol)
@@ -124,6 +124,19 @@ async def async_setup_entry(
                 
                 if unique_id not in known_ids:
                     sensor = GhostfolioWatchlistSensor(coordinator, config_entry, item)
+                    new_entities.append(sensor)
+                    known_ids.add(unique_id)
+
+        # --- FMP SENSORS ---
+        fmp_key = config_entry.data.get(CONF_FMP_API_KEY)
+        if fmp_key:
+            fmp_payload = coordinator.data.get("fmp_data", {})
+            for symbol in fmp_payload.keys():
+                safe_symbol = slugify(symbol)
+                unique_id = f"ghostfolio_fmp_{safe_symbol}_{config_entry.entry_id}"
+                
+                if unique_id not in known_ids:
+                    sensor = GhostfolioFMPSensor(coordinator, config_entry, symbol)
                     new_entities.append(sensor)
                     known_ids.add(unique_id)
 
@@ -185,8 +198,6 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
             "performance", {}
         )
 
-    # --- HEALTH CHECKS ---
-
     def _is_provider_down(self, data_source: str | None) -> bool:
         """Check if a specific data source is down."""
         if not data_source:
@@ -196,7 +207,6 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
             
         providers = self.coordinator.data.get("providers", {})
         provider_info = providers.get(data_source)
-        # If provider is tracked and inactive -> Down
         if provider_info and not provider_info.get("is_active", True):
             return True
         return False
@@ -210,7 +220,6 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
         all_holdings = self.coordinator.data.get("account_holdings", {})
         for holdings in all_holdings.values():
             for h in holdings:
-                # Check active quantity
                 if float(h.get("quantity") or 0) > 0:
                      if self._is_provider_down(h.get("dataSource")):
                          return False
@@ -383,7 +392,6 @@ class GhostfolioAccountBaseSensor(GhostfolioBaseSensor):
 
     @property
     def is_account_healthy(self) -> bool:
-        """Return False if ANY active holding in THIS account uses a down provider."""
         if not self.coordinator.data:
             return True
 
@@ -413,7 +421,6 @@ class GhostfolioAccountValueSensor(GhostfolioAccountBaseSensor):
         return self.account_performance_data.get("currentValueInBaseCurrency")
 
 class GhostfolioAccountNetWorthSensor(GhostfolioAccountBaseSensor):
-    """Sensor for Account Net Worth (Invested + Cash)."""
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
@@ -523,11 +530,8 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         self.symbol = holding_data.get("symbol")
         self.ticker_name = holding_data.get("name", self.symbol)
 
-        # Unique ID
         safe_symbol = slugify(self.symbol)
         self._attr_unique_id = f"ghostfolio_holding_{self.account_id}_{safe_symbol}_{config_entry.entry_id}"
-
-        # NAME FIXED: Just the Ticker Name (e.g. "Apple Inc.")
         self._attr_name = self.ticker_name
 
         self._attr_device_info = {
@@ -538,18 +542,15 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
             "via_device": (DOMAIN, f"ghostfolio_portfolio_{config_entry.entry_id}"),
         }
         
-        # Track previous limit states for Event Firing
         self._prev_low_reached = False
         self._prev_high_reached = False
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
         self._check_and_fire_events()
         super()._handle_coordinator_update()
 
     async def async_update(self) -> None:
-        """Manual update triggered by number entity."""
         self._check_and_fire_events()
 
     @property
@@ -569,24 +570,17 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         if not data:
             return None
             
-        # --- Provider Check ---
-        # If the holding's data source is reported as Down, return None (Unknown)
         if self._is_provider_down(data.get("dataSource")):
              return None
-        # ----------------------
 
         return data.get("valueInBaseCurrency") or data.get("value")
 
     def _get_limit_state(self, limit_type: str, current_value: float, compare_op):
-        """Helper to check limit status and return (limit_val_or_false, is_reached, limit_val)."""
         registry = er.async_get(self.hass)
         safe_symbol = slugify(self.symbol)
         entry_id = self.config_entry.entry_id
         
-        # Reconstruct the Number's unique ID
-        # Pattern: ghostfolio_limit_{limit_type}_{account_id}_{safe_symbol}_{entry_id}
         num_unique_id = f"ghostfolio_limit_{limit_type}_{self.account_id}_{safe_symbol}_{entry_id}"
-        
         entity_id = registry.async_get_entity_id("number", DOMAIN, num_unique_id)
         
         limit_display = False 
@@ -600,7 +594,6 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
                     limit_val = float(state_obj.state)
                     if limit_val > 0:
                         limit_display = limit_val
-                        # Check logic: Ensure we have a valid price before comparing
                         if current_value > 0: 
                                 if compare_op(current_value, limit_val):
                                     is_reached = True
@@ -609,16 +602,13 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         return limit_display, is_reached, limit_val
 
     def _check_and_fire_events(self):
-        """Check limits against Market Price (not total value) and fire events if transitions occur."""
         data = self.holding_data
         if not data:
             return
 
-        # FIXED: Use marketPrice (Asset Price) for limits, NOT valueInBaseCurrency (Total Value)
         current_price = float(data.get("marketPrice") or 0)
         currency_asset = data.get("currency")
         
-        # Low Limit Check
         low_disp, low_reached, low_val = self._get_limit_state("low", current_price, lambda val, limit: val <= limit)
         if low_reached and not self._prev_low_reached:
             self.hass.bus.async_fire("ghostfolio_limit_alert", {
@@ -631,7 +621,6 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
             })
         self._prev_low_reached = low_reached
 
-        # High Limit Check
         high_disp, high_reached, high_val = self._get_limit_state("high", current_price, lambda val, limit: val >= limit)
         if high_reached and not self._prev_high_reached:
             self.hass.bus.async_fire("ghostfolio_limit_alert", {
@@ -650,24 +639,19 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         if not data:
             return None
 
-        # Currency Logic
         asset_currency = data.get("currency")
         base_currency = self.native_unit_of_measurement
 
-        # Raw Values
         quantity = float(data.get("quantity") or 0)
         investment_in_base = float(data.get("investment") or 0)
         current_value_in_base = float(data.get("valueInBaseCurrency") or data.get("value") or 0)
         market_price_asset = float(data.get("marketPrice") or 0)
 
-        # --- NEW: Market Change Logic ---
         is_gbp_conversion = (asset_currency == "GBp")
         raw_change = data.get("marketChange")
         market_change = (raw_change / 100) if (is_gbp_conversion and raw_change is not None) else raw_change
         market_change_pct = data.get("marketChangePercentage")
-        # --------------------------------
 
-        # Calculations
         avg_buy_price_base = investment_in_base / quantity if quantity > 0 else 0
         market_price_base = current_value_in_base / quantity if quantity > 0 else 0
         gain_value_base = current_value_in_base - investment_in_base
@@ -702,7 +686,6 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
             "data_source": data.get("dataSource"),
             "market_change_24h": market_change,                      
             "market_change_pct_24h": market_change_pct,              
-            # Limit Attributes
             "low_limit_set": low_val,
             "low_limit_reached": low_reached,
             "high_limit_set": high_val,
@@ -727,8 +710,6 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
 
         safe_symbol = slugify(self.symbol)
         self._attr_unique_id = f"ghostfolio_watchlist_{safe_symbol}_{config_entry.entry_id}"
-
-        # NAME FIXED: Just the Ticker Name
         self._attr_name = self.ticker_name
 
         self._attr_device_info = {
@@ -739,18 +720,15 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
             "via_device": (DOMAIN, f"ghostfolio_portfolio_{config_entry.entry_id}"),
         }
         
-        # Track previous limit states for Event Firing
         self._prev_low_reached = False
         self._prev_high_reached = False
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
         self._check_and_fire_events()
         super()._handle_coordinator_update()
 
     async def async_update(self) -> None:
-        """Manual update triggered by number entity."""
         self._check_and_fire_events()
 
     @property
@@ -769,12 +747,9 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
         if not data:
             return None
             
-        # --- Provider Check ---
         if self._is_provider_down(self.data_source):
              return None
-        # ----------------------
 
-        # GBp Handling: Convert to GBP
         val = data.get("marketPrice")
         if data.get("currency") == "GBp" and val is not None:
             return val / 100
@@ -786,21 +761,16 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
         data = self.item_data
         if not data:
             return None
-        # GBp Handling: Show as GBP
         if data.get("currency") == "GBp":
             return "GBP"
         return data.get("currency")
 
     def _get_limit_state(self, limit_type: str, current_value: float, compare_op):
-        """Helper to check limit status and return (limit_val_or_false, is_reached, limit_val)."""
         registry = er.async_get(self.hass)
         safe_symbol = slugify(self.symbol)
         entry_id = self.config_entry.entry_id
         
-        # Reconstruct the Number's unique ID
-        # Pattern: ghostfolio_watchlist_limit_{limit_type}_{slugify(symbol)}_{entry_id}
         num_unique_id = f"ghostfolio_watchlist_limit_{limit_type}_{safe_symbol}_{entry_id}"
-        
         entity_id = registry.async_get_entity_id("number", DOMAIN, num_unique_id)
         
         limit_display = False 
@@ -822,18 +792,15 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
         return limit_display, is_reached, limit_val
 
     def _check_and_fire_events(self):
-        """Check limits and fire events if transitions occur."""
         data = self.item_data
         if not data:
             return
 
-        # GBp Handling for attributes and limit check
         is_gbp_conversion = (data.get("currency") == "GBp")
         raw_price = data.get("marketPrice") or 0
         current_price = (raw_price / 100) if is_gbp_conversion else raw_price
         currency = "GBP" if is_gbp_conversion else data.get("currency")
 
-        # Low Limit Check
         low_disp, low_reached, low_val = self._get_limit_state("low", current_price, lambda val, limit: val <= limit)
         if low_reached and not self._prev_low_reached:
             self.hass.bus.async_fire("ghostfolio_limit_alert", {
@@ -846,7 +813,6 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
             })
         self._prev_low_reached = low_reached
 
-        # High Limit Check
         high_disp, high_reached, high_val = self._get_limit_state("high", current_price, lambda val, limit: val >= limit)
         if high_reached and not self._prev_high_reached:
             self.hass.bus.async_fire("ghostfolio_limit_alert", {
@@ -865,7 +831,6 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
         if not data:
             return None
         
-        # GBp Handling for attributes and limit check
         is_gbp_conversion = (data.get("currency") == "GBp")
         raw_price = data.get("marketPrice") or 0
         current_price = (raw_price / 100) if is_gbp_conversion else raw_price
@@ -873,10 +838,8 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
         raw_change = data.get("marketChange")
         market_change = (raw_change / 100) if (is_gbp_conversion and raw_change is not None) else raw_change
 
-        # --- LIMIT CHECK LOGIC (Reusing Helper) ---
         low_val, low_reached, _ = self._get_limit_state("low", current_price, lambda val, limit: val <= limit)
         high_val, high_reached, _ = self._get_limit_state("high", current_price, lambda val, limit: val >= limit)
-        # -------------------------
 
         return {
             "ticker": self.symbol,
@@ -888,9 +851,55 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
             "trend_200d": data.get("trend200d"),
             "market_change_24h": market_change,
             "market_change_pct_24h": data.get("marketChangePercentage"),
-            # Limit Attributes
             "low_limit_set": low_val,
             "low_limit_reached": low_reached,
             "high_limit_set": high_val,
             "high_limit_reached": high_reached,
+        }
+
+# --- ENRICHMENT SENSORS ---
+
+class GhostfolioFMPSensor(GhostfolioBaseSensor):
+    """Sensor for Financial Modeling Prep Enrichment Data."""
+
+    _attr_icon = "mdi:finance"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator, config_entry, symbol):
+        super().__init__(coordinator, config_entry)
+        self.symbol = symbol
+        
+        safe_symbol = slugify(self.symbol)
+        self._attr_unique_id = f"ghostfolio_fmp_{safe_symbol}_{config_entry.entry_id}"
+        self._attr_name = f"{self.symbol} Fundamentals"
+
+    @property
+    def fmp_data(self) -> dict | None:
+        if not self.coordinator.data:
+            return None
+        return self.coordinator.data.get("fmp_data", {}).get(self.symbol)
+
+    @property
+    def native_value(self) -> float | None:
+        data = self.fmp_data
+        if not data:
+            return None
+        peg = data.get("priceToEarningsGrowthRatioTTM")
+        return round(float(peg), 2) if peg is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        data = self.fmp_data
+        if not data:
+            return None
+        
+        return {
+            "ticker": self.symbol,
+            "pe_ratio_ttm": data.get("priceToEarningsRatioTTM"),
+            "pb_ratio_ttm": data.get("priceToBookRatioTTM"),
+            "ps_ratio_ttm": data.get("priceToSalesRatioTTM"),
+            "dividend_yield_ttm": data.get("dividendYieldTTM"),
+            "net_profit_margin_ttm": data.get("netProfitMarginTTM"),
+            "debt_to_equity_ttm": data.get("debtToEquityRatioTTM"),
+            "free_cash_flow_per_share_ttm": data.get("freeCashFlowPerShareTTM"),
         }
