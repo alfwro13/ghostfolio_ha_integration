@@ -50,6 +50,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    # --- Register Custom Service for On-Demand Refresh ---
+    async def refresh_fundamentals(call):
+        """Force a refresh of Yahoo Finance fundamentals."""
+        for e in hass.config_entries.async_entries(DOMAIN):
+            if hasattr(e, "runtime_data"):
+                coord = e.runtime_data
+                if isinstance(coord, GhostfolioDataUpdateCoordinator):
+                    _LOGGER.info("Forcing on-demand refresh of Yahoo Fundamentals")
+                    coord.last_fundamentals_update = None  # Reset the 24h timer
+                    await coord.async_request_refresh()
+
+    if not hass.services.has_service(DOMAIN, "refresh_fundamentals"):
+        hass.services.async_register(DOMAIN, "refresh_fundamentals", refresh_fundamentals)
+
     return True
 
 
@@ -229,7 +243,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for res in health_results:
                 provider_results[res["code"]] = res
 
-            # --- Yahoo Finance Fundamentals Enrichment (Includes earningsTrend) ---
+            # --- Yahoo Finance Fundamentals Enrichment ---
             if self.entry.data.get(CONF_SHOW_FUNDAMENTALS, False):
                 now = dt_util.utcnow()
                 if self.last_fundamentals_update is None or (now - self.last_fundamentals_update) > timedelta(hours=24):
@@ -252,7 +266,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
                             
                             for ticker in all_tickers:
-                                # MODIFIED: Added earningsTrend to modules list
                                 url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=defaultKeyStatistics,financialData,summaryDetail,earningsTrend"
                                 if crumb:
                                     url += f"&crumb={crumb}"
@@ -362,7 +375,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for symbol in fund_payload.keys():
                 safe_symbol = slugify(symbol)
                 valid_unique_ids.add(f"ghostfolio_fundamentals_{safe_symbol}_{entry_id}")
-                valid_unique_ids.add(f"ghostfolio_valuation_{safe_symbol}_{entry_id}")
+                # Removed the Valuation Unique ID
 
         for entity_entry in entries:
             if entity_entry.unique_id not in valid_unique_ids:
