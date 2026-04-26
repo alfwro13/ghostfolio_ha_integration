@@ -22,6 +22,7 @@ from .const import (
     CONF_SHOW_ACCOUNTS,
     CONF_SHOW_HOLDINGS,
     CONF_SHOW_WATCHLIST,
+    CONF_FMP_API_KEY,
     DOMAIN,
     DATA_PROVIDERS
 )
@@ -69,6 +70,10 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         )
         self.api = api
         self.entry = entry
+        
+        # FMP Caching variables
+        self.fmp_data_cache = {}
+        self.last_fmp_update = None
 
     async def _enrich_item_with_market_data(self, item: dict) -> dict:
         """Fetch market data to calculate 24h change and enrich an asset or watchlist item."""
@@ -134,7 +139,8 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             "account_performances": {},
             "account_holdings": {},
             "watchlist": [],
-            "providers": {}
+            "providers": {},
+            "fmp_data": self.fmp_data_cache
         }
 
         try:
@@ -170,14 +176,11 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 # B. Fetch Holdings (if enabled)
                 if show_holdings:
                     try:
-                        # We fetch per account to ensure we know exactly which account the holding belongs to
                         holdings_data = await self.api.get_holdings(account_id=account_id)
-                        # The API usually returns { "holdings": [...] }
                         raw_holdings = holdings_data.get("holdings", [])
                         
                         enriched_holdings = []
                         for h in raw_holdings:
-                            # Only enrich active holdings to save API calls
                             if float(h.get("quantity") or 0) > 0:
                                 h = await self._enrich_item_with_market_data(h)
                             enriched_holdings.append(h)
@@ -190,14 +193,12 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             if show_watchlist:
                 try:
                     wl_response = await self.api.get_watchlist()
-                    # Handle response being list or dict depending on API version
                     raw_items = []
                     if isinstance(wl_response, list):
                         raw_items = wl_response
                     elif isinstance(wl_response, dict):
                         raw_items = wl_response.get("watchlist", []) or wl_response.get("items", [])
                     
-                    # Enrich watchlist items with Market Data (Price & Currency)
                     for item in raw_items:
                         enriched_item = await self._enrich_item_with_market_data(item)
                         watchlist_items.append(enriched_item)
@@ -205,7 +206,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 except Exception as e:
                     _LOGGER.warning(f"Failed to fetch watchlist: {e}")
 
-            # 5. Fetch Provider Health (Parallel)
+            # 5. Fetch Provider Health
             provider_results = {}
             async def _fetch_health(code):
                 return await self.api.get_provider_health(code)
@@ -213,6 +214,46 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             health_results = await asyncio.gather(*[_fetch_health(p) for p in DATA_PROVIDERS])
             for res in health_results:
                 provider_results[res["code"]] = res
+
+            # 6. Fetch Financial Modeling Prep Data (24h throttled)
+            fmp_api_key = self.entry.data.get(CONF_FMP_API_KEY)
+            if fmp_api_key:
+                now = datetime.now(timezone.utc)
+                if self.last_fmp_update is None or (now - self.last_fmp_update) > timedelta(hours=24):
+                    _LOGGER.debug("Starting daily FMP data enrichment fetch")
+                    us_tickers = set()
+
+                    # Add US Holdings
+                    for acc_holdings in holdings_by_account.values():
+                        for h in acc_holdings:
+                            if float(h.get("quantity") or 0) > 0 and "." not in h.get("symbol", "."):
+                                us_tickers.add(h.get("symbol"))
+
+                    # Add US Watchlist
+                    for w in watchlist_items:
+                        if "." not in w.get("symbol", "."):
+                            us_tickers.add(w.get("symbol"))
+
+                    if us_tickers:
+                        try:
+                            session = self.api._get_session()
+                            for ticker in us_tickers:
+                                url = f"https://financialmodelingprep.com/stable/ratios-ttm?symbol={ticker}&apikey={fmp_api_key}"
+                                try:
+                                    async with session.get(url) as response:
+                                        if response.status == 200:
+                                            fmp_resp = await response.json()
+                                            if fmp_resp and isinstance(fmp_resp, list) and len(fmp_resp) > 0:
+                                                self.fmp_data_cache[ticker] = fmp_resp[0]
+                                except Exception as inner_e:
+                                    _LOGGER.error(f"Failed to fetch FMP data for {ticker}: {inner_e}")
+                                
+                                # Sleep briefly to respect API limits
+                                await asyncio.sleep(0.3)
+                            
+                            self.last_fmp_update = now
+                        except Exception as e:
+                            _LOGGER.error(f"Failed FMP enrichment process: {e}")
 
             # --- SUCCESS ---
             data["server_online"] = True
@@ -222,6 +263,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             data["account_holdings"] = holdings_by_account
             data["watchlist"] = watchlist_items
             data["providers"] = provider_results
+            data["fmp_data"] = self.fmp_data_cache
             
             return data
 
@@ -270,6 +312,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             account_id = account["id"]
             if show_accounts:
                 valid_unique_ids.add(f"ghostfolio_account_value_{account_id}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_account_net_worth_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_cost_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_perf_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_perf_pct_{account_id}_{entry_id}")
@@ -278,7 +321,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         # 5. Holdings (Sensors + Numbers)
         if self.entry.data.get(CONF_SHOW_HOLDINGS, True):
             all_holdings = self.data.get("account_holdings", {})
-            # Need to iterate per account to match the ID generation logic
             for account in accounts_list:
                 if account.get("isExcluded"):
                     continue
@@ -286,14 +328,11 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 holdings = all_holdings.get(account_id, [])
                 
                 for h in holdings:
-                    # Only active holdings generate sensors
                     if float(h.get("quantity") or 0) > 0:
                         symbol = h.get("symbol")
                         safe_symbol = slugify(symbol)
                         
-                        # Sensor
                         valid_unique_ids.add(f"ghostfolio_holding_{account_id}_{safe_symbol}_{entry_id}")
-                        # Numbers
                         valid_unique_ids.add(f"ghostfolio_limit_low_{account_id}_{safe_symbol}_{entry_id}")
                         valid_unique_ids.add(f"ghostfolio_limit_high_{account_id}_{safe_symbol}_{entry_id}")
 
@@ -304,11 +343,17 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 symbol = item.get("symbol")
                 safe_symbol = slugify(symbol)
                 
-                # Sensor
                 valid_unique_ids.add(f"ghostfolio_watchlist_{safe_symbol}_{entry_id}")
-                # Numbers
                 valid_unique_ids.add(f"ghostfolio_watchlist_limit_low_{safe_symbol}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_watchlist_limit_high_{safe_symbol}_{entry_id}")
+
+        # 7. FMP Sensors
+        fmp_key = self.entry.data.get(CONF_FMP_API_KEY)
+        if fmp_key:
+            fmp_payload = self.data.get("fmp_data", {})
+            for symbol in fmp_payload.keys():
+                safe_symbol = slugify(symbol)
+                valid_unique_ids.add(f"ghostfolio_fmp_{safe_symbol}_{entry_id}")
 
         # Execute Prune
         removed_count = 0
