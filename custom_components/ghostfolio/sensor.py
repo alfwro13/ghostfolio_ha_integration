@@ -108,23 +108,16 @@ async def async_setup_entry(
                     new_entities.append(GhostfolioWatchlistSensor(coordinator, config_entry, item))
                     known_ids.add(unique_id)
 
-        # --- FUNDAMENTALS & VALUATION ---
+        # --- FUNDAMENTALS ---
         if show_fundamentals:
             fund_payload = coordinator.data.get("fundamentals_data", {})
             for symbol in fund_payload.keys():
                 safe_symbol = slugify(symbol)
                 
-                # 1. Fundamentals Sensor (State = Ticker)
                 fund_id = f"ghostfolio_fundamentals_{safe_symbol}_{config_entry.entry_id}"
                 if fund_id not in known_ids:
                     new_entities.append(GhostfolioFundamentalsSensor(coordinator, config_entry, symbol))
                     known_ids.add(fund_id)
-                
-                # 2. Valuation Sensor (State = Undervalued/Overpriced)
-                val_id = f"ghostfolio_valuation_{safe_symbol}_{config_entry.entry_id}"
-                if val_id not in known_ids:
-                    new_entities.append(GhostfolioValuationSensor(coordinator, config_entry, symbol))
-                    known_ids.add(val_id)
 
         if new_entities:
             async_add_entities(new_entities)
@@ -686,29 +679,29 @@ def _extract_yahoo_raw(data):
 def _calculate_lynch_peg(data):
     """Calculate the Lynch PEG Ratio using 1y forward growth and dividend yield."""
     try:
-        # 1. Forward P/E
+        # Fallback to summaryDetail if defaultKeyStatistics doesn't have it
         fwd_pe = data.get("defaultKeyStatistics", {}).get("forwardPE", {}).get("raw")
-        
-        # 2. Dividend Yield
+        if fwd_pe is None:
+            fwd_pe = data.get("summaryDetail", {}).get("forwardPE", {}).get("raw")
+            
         div_yield = data.get("summaryDetail", {}).get("dividendYield", {}).get("raw") or 0
         
-        # 3. Projected 1y Growth (from earningsTrend)
-        # We look for the trend entry with period '+1y' or '1y'
         trends = data.get("earningsTrend", {}).get("trend", [])
         next_year_growth = None
+        # Safely loop through trends looking for +1y or 1y or even 0y (current year projection)
         for t in trends:
-            if t.get("period") in ["+1y", "1y"]:
-                next_year_growth = t.get("growth", {}).get("raw")
-                break
+            if t.get("period") in ["+1y", "1y", "0y", "+5y"]:
+                val = t.get("growth", {}).get("raw")
+                if val is not None:
+                    next_year_growth = val
+                    break
         
-        if fwd_pe and next_year_growth:
-            # Lynch Math: PE / (Growth_Percentage + Yield_Percentage)
-            # Yahoo provides Growth/Yield as decimals (0.50 for 50%).
+        if fwd_pe is not None and next_year_growth is not None:
             denominator = (next_year_growth * 100) + (div_yield * 100)
             if denominator > 0:
                 return round(fwd_pe / denominator, 2)
-    except Exception:
-        pass
+    except Exception as e:
+        _LOGGER.debug(f"Error calculating Lynch PEG: {e}")
     return None
 
 class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
@@ -752,20 +745,38 @@ class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
         if not data:
             return attrs
             
-        # Calculate and explicitly expose the requested attributes at the top
+        # --- 1. Valuation & Lynch Logic ---
         lynch_peg = _calculate_lynch_peg(data)
         attrs["lynch_peg_ratio"] = lynch_peg
+        
+        if lynch_peg is None:
+            attrs["valuation"] = "unknown"
+        elif lynch_peg < 1.0:
+            attrs["valuation"] = "undervalued"
+        elif lynch_peg > 2.0:
+            attrs["valuation"] = "overpriced"
+        else:
+            attrs["valuation"] = "fairly_valued"
+            
+        # --- 2. Top-Level Requested Attributes ---
         attrs["standard_peg_ratio"] = data.get("defaultKeyStatistics", {}).get("pegRatio", {}).get("raw")
-        attrs["forward_pe"] = data.get("defaultKeyStatistics", {}).get("forwardPE", {}).get("raw")
+        
+        fwd_pe = data.get("defaultKeyStatistics", {}).get("forwardPE", {}).get("raw")
+        if fwd_pe is None:
+            fwd_pe = data.get("summaryDetail", {}).get("forwardPE", {}).get("raw")
+        attrs["forward_pe"] = fwd_pe
+        
         attrs["dividend_yield"] = data.get("summaryDetail", {}).get("dividendYield", {}).get("raw")
         
         trends = data.get("earningsTrend", {}).get("trend", [])
         for t in trends:
-            if t.get("period") in ["+1y", "1y"]:
-                attrs["projected_1y_growth"] = t.get("growth", {}).get("raw")
-                break
+            if t.get("period") in ["+1y", "1y", "0y", "+5y"]:
+                val = t.get("growth", {}).get("raw")
+                if val is not None:
+                    attrs["projected_1y_growth"] = val
+                    break
 
-        # Flatten and add the rest of the Yahoo payload safely
+        # --- 3. Rest of Yahoo Payload ---
         stats = _extract_yahoo_raw(data.get("defaultKeyStatistics", {}))
         fin = _extract_yahoo_raw(data.get("financialData", {}))
         summary = _extract_yahoo_raw(data.get("summaryDetail", {}))
@@ -775,53 +786,3 @@ class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
         attrs.update(fin)
         
         return {k: v for k, v in attrs.items() if not isinstance(v, (dict, list))}
-
-class GhostfolioValuationSensor(GhostfolioBaseSensor):
-    """Sensor to display valuation status based on Lynch PEG Ratio."""
-    _attr_icon = "mdi:gauge"
-
-    @property
-    def native_unit_of_measurement(self) -> str | None: return None
-
-    def __init__(self, coordinator, config_entry, symbol):
-        super().__init__(coordinator, config_entry)
-        self.symbol = symbol
-        safe_symbol = slugify(self.symbol)
-        
-        self._attr_unique_id = f"ghostfolio_valuation_{safe_symbol}_{config_entry.entry_id}"
-        self._attr_name = f"{self.symbol} Valuation"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"ghostfolio_device_fundamentals_{config_entry.entry_id}")},
-            "name": "Fundamentals", 
-            "manufacturer": "Yahoo Finance",
-            "model": "Fundamental Tracking",
-            "via_device": (DOMAIN, f"ghostfolio_portfolio_{config_entry.entry_id}"),
-        }
-
-    @property
-    def native_value(self) -> str | None:
-        data_cache = self.coordinator.data.get("fundamentals_data", {})
-        data = data_cache.get(self.symbol, {})
-        if not data:
-            return "unknown"
-        
-        lynch_peg = _calculate_lynch_peg(data)
-        if lynch_peg is None:
-            return "unknown"
-        
-        if lynch_peg < 1.0:
-            return "undervalued"
-        if lynch_peg > 2.0:
-            return "overpriced"
-        
-        return "fairly_valued"
-
-    @property
-    def extra_state_attributes(self) -> dict | None:
-        data_cache = self.coordinator.data.get("fundamentals_data", {})
-        data = data_cache.get(self.symbol, {})
-        return {
-            "ticker": self.symbol,
-            "lynch_peg_ratio": _calculate_lynch_peg(data) if data else None,
-            "valuation_rule": "Lynch PEG: <1 Undervalued, >2 Overpriced"
-        }
