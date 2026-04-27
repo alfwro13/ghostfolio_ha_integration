@@ -89,6 +89,11 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         self._store = Store(hass, 1, f"{DOMAIN}_fundamentals_cache_{entry.entry_id}")
         self.fundamentals_cache = {}
         self.last_fundamentals_update = None
+
+        self._dividends_store = Store(hass, 1, f"{DOMAIN}_dividends_cache_{entry.entry_id}")
+        self.dividends_cache = {}
+        self.last_dividends_update = None
+
         self._cache_loaded = False
         self._yahoo_crumb = None
 
@@ -171,6 +176,14 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 last_update_str = stored_data.get("last_update")
                 if last_update_str:
                     self.last_fundamentals_update = dt_util.parse_datetime(last_update_str)
+
+            stored_div_data = await self._dividends_store.async_load()
+            if stored_div_data:
+                self.dividends_cache = stored_div_data.get("data", {})
+                last_div_update_str = stored_div_data.get("last_update")
+                if last_div_update_str:
+                    self.last_dividends_update = dt_util.parse_datetime(last_div_update_str)
+
             self._cache_loaded = True
 
         data = {
@@ -181,7 +194,8 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             "account_holdings": {},
             "watchlist": [],
             "providers": {},
-            "fundamentals_data": self.fundamentals_cache
+            "fundamentals_data": self.fundamentals_cache,
+            "dividends": self.dividends_cache
         }
 
         try:
@@ -243,9 +257,42 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for res in health_results:
                 provider_results[res["code"]] = res
 
+            # --- Dividends Enrichment (Once a Day) ---
+            now = dt_util.utcnow()
+            if show_holdings:
+                if self.last_dividends_update is None or (now - self.last_dividends_update) > timedelta(hours=24):
+                    _LOGGER.debug("Starting daily Activities data fetch for Dividends")
+                    try:
+                        activities_resp = await self.api.get_activities()
+                        dividend_data = {}
+                        for act in activities_resp.get("activities", []):
+                            if act.get("type") == "DIVIDEND":
+                                acc_id = act.get("accountId")
+                                sym = act.get("symbol")
+                                
+                                if acc_id and sym:
+                                    qty = float(act.get("quantity") or 0)
+                                    price = float(act.get("unitPrice") or 0)
+                                    amount = qty * price
+                                    
+                                    if acc_id not in dividend_data:
+                                        dividend_data[acc_id] = {}
+                                    
+                                    dividend_data[acc_id][sym] = dividend_data[acc_id].get(sym, 0.0) + amount
+                        
+                        self.dividends_cache = dividend_data
+                        self.last_dividends_update = now
+                        await self._dividends_store.async_save({
+                            "data": self.dividends_cache,
+                            "last_update": now.isoformat()
+                        })
+                    except Exception as e:
+                        _LOGGER.warning(f"Failed to fetch activities for dividends: {e}")
+
+            data["dividends"] = self.dividends_cache
+
             # --- Yahoo Finance Fundamentals Enrichment ---
             if self.entry.data.get(CONF_SHOW_FUNDAMENTALS, False):
-                now = dt_util.utcnow()
                 if self.last_fundamentals_update is None or (now - self.last_fundamentals_update) > timedelta(hours=24):
                     _LOGGER.debug("Starting daily Fundamentals data fetch via Yahoo")
                     all_tickers = set()
@@ -375,7 +422,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for symbol in fund_payload.keys():
                 safe_symbol = slugify(symbol)
                 valid_unique_ids.add(f"ghostfolio_fundamentals_{safe_symbol}_{entry_id}")
-                # Removed the Valuation Unique ID
 
         for entity_entry in entries:
             if entity_entry.unique_id not in valid_unique_ids:
