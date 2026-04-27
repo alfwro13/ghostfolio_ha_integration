@@ -523,8 +523,9 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         # --- Extract Dividends ---
         dividends_map = self.coordinator.data.get("dividends", {})
         account_dividends = dividends_map.get(self.account_id, {})
-        raw_dividends = account_dividends.get(self.symbol, 0.0)
-        accumulated_dividends = (raw_dividends / 100) if is_gbp_conversion else raw_dividends
+        
+        # Ghostfolio activity values are already exact currency amounts, no need for the GBp pence division
+        accumulated_dividends = account_dividends.get(self.symbol, 0.0)
 
         return {
             "ticker": self.symbol,
