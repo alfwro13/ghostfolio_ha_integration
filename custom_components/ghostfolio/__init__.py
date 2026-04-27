@@ -279,14 +279,11 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                                 if acc_id and sym:
                                     sym = sym.upper() # Ensure case match
                                     
-                                    # Fix: Prioritize value in the account's Base Currency
+                                    # Prioritize value in the account's Base Currency
                                     amount = float(act.get("valueInBaseCurrency") or 0)
                                     
-                                    # Fallback 1: Raw value (might be in asset currency)
                                     if amount == 0:
                                         amount = float(act.get("value") or 0)
-                                        
-                                    # Fallback 2: Calculate from qty/price
                                     if amount == 0:
                                         qty = float(act.get("quantity") or 0)
                                         price = float(act.get("unitPrice") or 0)
@@ -384,6 +381,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             valid_unique_ids.add(f"ghostfolio_net_performance_percent_with_currency_{entry_id}")
             valid_unique_ids.add(f"ghostfolio_net_performance_with_currency_{entry_id}")
             valid_unique_ids.add(f"ghostfolio_simple_gain_percent_{entry_id}")
+            valid_unique_ids.add(f"ghostfolio_portfolio_dividends_{entry_id}") # NEW
 
         valid_unique_ids.add(f"ghostfolio_server_status_{entry_id}")
         for provider in DATA_PROVIDERS:
@@ -405,6 +403,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 valid_unique_ids.add(f"ghostfolio_account_perf_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_perf_pct_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_simple_gain_{account_id}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_account_dividends_{account_id}_{entry_id}") # NEW
 
         if self.entry.data.get(CONF_SHOW_HOLDINGS, True):
             all_holdings = self.data.get("account_holdings", {})
