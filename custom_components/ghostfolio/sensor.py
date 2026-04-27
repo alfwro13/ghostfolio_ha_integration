@@ -542,7 +542,7 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
             "gain_value_currency": base_currency,
             "gain_pct": round(gain_pct, 2),
             "accumulated_dividends": round(accumulated_dividends, 2) if accumulated_dividends > 0 else 0.0,
-            "accumulated_dividends_currency": "GBP" if is_gbp_conversion else asset_currency,
+            "accumulated_dividends_currency": base_currency,
             "trend_vs_buy": trend,
             "asset_class": data.get("assetClass"),
             "data_source": data.get("dataSource"),
