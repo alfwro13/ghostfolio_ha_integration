@@ -90,8 +90,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         self.fundamentals_cache = {}
         self.last_fundamentals_update = None
 
-        # Bumped to v2 to force a fresh pull of activities on next boot
-        self._dividends_store = Store(hass, 1, f"{DOMAIN}_dividends_cache_v2_{entry.entry_id}")
+        # Dividends now strictly kept in memory to force a refresh on HA startup
         self.dividends_cache = {}
         self.last_dividends_update = None
 
@@ -178,13 +177,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 if last_update_str:
                     self.last_fundamentals_update = dt_util.parse_datetime(last_update_str)
 
-            stored_div_data = await self._dividends_store.async_load()
-            if stored_div_data:
-                self.dividends_cache = stored_div_data.get("data", {})
-                last_div_update_str = stored_div_data.get("last_update")
-                if last_div_update_str:
-                    self.last_dividends_update = dt_util.parse_datetime(last_div_update_str)
-
             self._cache_loaded = True
 
         data = {
@@ -258,24 +250,36 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for res in health_results:
                 provider_results[res["code"]] = res
 
-            # --- Dividends Enrichment (Once a Day) ---
+            # --- Dividends Enrichment (On Boot & Daily) ---
             now = dt_util.utcnow()
             if show_holdings:
                 if self.last_dividends_update is None or not self.dividends_cache or (now - self.last_dividends_update) > timedelta(hours=24):
-                    _LOGGER.debug("Starting daily Activities data fetch for Dividends")
+                    _LOGGER.debug("Fetching Activities data for Dividends")
                     try:
                         activities_resp = await self.api.get_activities()
                         dividend_data = {}
-                        for act in activities_resp.get("activities", []):
-                            if act.get("type") == "DIVIDEND":
+                        
+                        # Handle both Array and Dictionary responses safely
+                        act_list = []
+                        if isinstance(activities_resp, list):
+                            act_list = activities_resp
+                        elif isinstance(activities_resp, dict):
+                            act_list = activities_resp.get("activities", [])
+                            
+                        for act in act_list:
+                            act_type = act.get("type", "").upper()
+                            if act_type == "DIVIDEND":
                                 acc_id = act.get("accountId")
+                                
+                                # Try standard symbol, fallback to nested relation
                                 sym = act.get("symbol")
+                                if not sym and "SymbolProfile" in act:
+                                    sym = act["SymbolProfile"].get("symbol")
                                 
                                 if acc_id and sym:
-                                    # Fix: Pull the exact cash value of the dividend first.
+                                    sym = sym.upper() # Ensure case match
                                     amount = float(act.get("value") or 0)
                                     
-                                    # Fallback in case value is zero but quantity/price exist
                                     if amount == 0:
                                         qty = float(act.get("quantity") or 0)
                                         price = float(act.get("unitPrice") or 0)
@@ -288,12 +292,8 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                         
                         self.dividends_cache = dividend_data
                         self.last_dividends_update = now
-                        await self._dividends_store.async_save({
-                            "data": self.dividends_cache,
-                            "last_update": now.isoformat()
-                        })
                     except Exception as e:
-                        _LOGGER.warning(f"Failed to fetch activities for dividends: {e}")
+                        _LOGGER.error(f"Failed to fetch activities for dividends: {e}")
 
             data["dividends"] = self.dividends_cache
 
