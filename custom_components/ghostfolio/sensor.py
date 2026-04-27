@@ -520,6 +520,13 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         low_val, low_reached, _ = self._get_limit_state("low", market_price_asset, lambda val, limit: val <= limit)
         high_val, high_reached, _ = self._get_limit_state("high", market_price_asset, lambda val, limit: val >= limit)
 
+        # --- Extract Dividends ---
+        dividends_map = self.coordinator.data.get("dividends", {})
+        account_dividends = dividends_map.get(self.account_id, {})
+        
+        # Ensure we uppercase the symbol to match the safe dictionary mapping
+        accumulated_dividends = account_dividends.get(self.symbol.upper(), 0.0)
+
         return {
             "ticker": self.symbol,
             "account": self.account_name,
@@ -534,6 +541,8 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
             "gain_value": round(gain_value_base, 2),
             "gain_value_currency": base_currency,
             "gain_pct": round(gain_pct, 2),
+            "accumulated_dividends": round(accumulated_dividends, 2) if accumulated_dividends > 0 else 0.0,
+            "accumulated_dividends_currency": base_currency,
             "trend_vs_buy": trend,
             "asset_class": data.get("assetClass"),
             "data_source": data.get("dataSource"),

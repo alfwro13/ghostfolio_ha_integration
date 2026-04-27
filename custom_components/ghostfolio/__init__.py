@@ -89,6 +89,11 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         self._store = Store(hass, 1, f"{DOMAIN}_fundamentals_cache_{entry.entry_id}")
         self.fundamentals_cache = {}
         self.last_fundamentals_update = None
+
+        # Dividends now strictly kept in memory to force a refresh on HA startup
+        self.dividends_cache = {}
+        self.last_dividends_update = None
+
         self._cache_loaded = False
         self._yahoo_crumb = None
 
@@ -171,6 +176,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 last_update_str = stored_data.get("last_update")
                 if last_update_str:
                     self.last_fundamentals_update = dt_util.parse_datetime(last_update_str)
+
             self._cache_loaded = True
 
         data = {
@@ -181,7 +187,8 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             "account_holdings": {},
             "watchlist": [],
             "providers": {},
-            "fundamentals_data": self.fundamentals_cache
+            "fundamentals_data": self.fundamentals_cache,
+            "dividends": self.dividends_cache
         }
 
         try:
@@ -243,9 +250,62 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for res in health_results:
                 provider_results[res["code"]] = res
 
+            # --- Dividends Enrichment (On Boot & Daily) ---
+            now = dt_util.utcnow()
+            if show_holdings:
+                if self.last_dividends_update is None or not self.dividends_cache or (now - self.last_dividends_update) > timedelta(hours=24):
+                    _LOGGER.debug("Fetching Activities data for Dividends")
+                    try:
+                        activities_resp = await self.api.get_activities()
+                        dividend_data = {}
+                        
+                        # Handle both Array and Dictionary responses safely
+                        act_list = []
+                        if isinstance(activities_resp, list):
+                            act_list = activities_resp
+                        elif isinstance(activities_resp, dict):
+                            act_list = activities_resp.get("activities", [])
+                            
+                        for act in act_list:
+                            act_type = act.get("type", "").upper()
+                            if act_type == "DIVIDEND":
+                                acc_id = act.get("accountId")
+                                
+                                # Try standard symbol, fallback to nested relation
+                                sym = act.get("symbol")
+                                if not sym and "SymbolProfile" in act:
+                                    sym = act["SymbolProfile"].get("symbol")
+                                
+                                if acc_id and sym:
+                                    sym = sym.upper() # Ensure case match
+                                    
+                                    # Fix: Prioritize value in the account's Base Currency
+                                    amount = float(act.get("valueInBaseCurrency") or 0)
+                                    
+                                    # Fallback 1: Raw value (might be in asset currency)
+                                    if amount == 0:
+                                        amount = float(act.get("value") or 0)
+                                        
+                                    # Fallback 2: Calculate from qty/price
+                                    if amount == 0:
+                                        qty = float(act.get("quantity") or 0)
+                                        price = float(act.get("unitPrice") or 0)
+                                        amount = qty * price
+                                    
+                                    if acc_id not in dividend_data:
+                                        dividend_data[acc_id] = {}
+                                    
+                                    dividend_data[acc_id][sym] = dividend_data[acc_id].get(sym, 0.0) + amount
+                        
+                        self.dividends_cache = dividend_data
+                        self.last_dividends_update = now
+                    except Exception as e:
+                        _LOGGER.error(f"Failed to fetch activities for dividends: {e}")
+
+            data["dividends"] = self.dividends_cache
+
             # --- Yahoo Finance Fundamentals Enrichment ---
             if self.entry.data.get(CONF_SHOW_FUNDAMENTALS, False):
-                now = dt_util.utcnow()
                 if self.last_fundamentals_update is None or (now - self.last_fundamentals_update) > timedelta(hours=24):
                     _LOGGER.debug("Starting daily Fundamentals data fetch via Yahoo")
                     all_tickers = set()
@@ -375,7 +435,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for symbol in fund_payload.keys():
                 safe_symbol = slugify(symbol)
                 valid_unique_ids.add(f"ghostfolio_fundamentals_{safe_symbol}_{entry_id}")
-                # Removed the Valuation Unique ID
 
         for entity_entry in entries:
             if entity_entry.unique_id not in valid_unique_ids:

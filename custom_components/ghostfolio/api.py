@@ -67,7 +67,6 @@ class GhostfolioAPI:
 
     async def get_holdings(self, account_id: str | None = None) -> dict[str, Any]:
         """Get holdings, optionally filtered by account."""
-        # This endpoint returns the current positions (holdings)
         params = {}
         if account_id:
             params["accounts"] = account_id
@@ -83,9 +82,14 @@ class GhostfolioAPI:
             f"{self.base_url}/api/v1/watchlist"
         )
 
+    async def get_activities(self) -> dict[str, Any]:
+        """Get all activities/transactions to calculate dividends."""
+        return await self._make_authenticated_request(
+            f"{self.base_url}/api/v1/activities"
+        )
+
     async def get_market_data(self, data_source: str, symbol: str) -> dict[str, Any]:
         """Get market data (price history and profile) for a specific symbol."""
-        # This endpoint provides the 'marketData' list and 'assetProfile'
         return await self._make_authenticated_request(
             f"{self.base_url}/api/v1/market-data/{data_source}/{symbol}"
         )
@@ -100,8 +104,6 @@ class GhostfolioAPI:
         headers = {"Authorization": f"Bearer {self.auth_token}"}
         
         try:
-            # We use the raw session here because we want to capture 503/404 as valid states
-            # instead of raising an exception.
             async with self._get_session().get(url, headers=headers) as response:
                 return {
                     "code": provider_code,
