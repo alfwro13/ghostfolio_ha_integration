@@ -90,7 +90,8 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         self.fundamentals_cache = {}
         self.last_fundamentals_update = None
 
-        self._dividends_store = Store(hass, 1, f"{DOMAIN}_dividends_cache_{entry.entry_id}")
+        # Bumped to v2 to force a fresh pull of activities on next boot
+        self._dividends_store = Store(hass, 1, f"{DOMAIN}_dividends_cache_v2_{entry.entry_id}")
         self.dividends_cache = {}
         self.last_dividends_update = None
 
@@ -260,7 +261,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             # --- Dividends Enrichment (Once a Day) ---
             now = dt_util.utcnow()
             if show_holdings:
-                if self.last_dividends_update is None or (now - self.last_dividends_update) > timedelta(hours=24):
+                if self.last_dividends_update is None or not self.dividends_cache or (now - self.last_dividends_update) > timedelta(hours=24):
                     _LOGGER.debug("Starting daily Activities data fetch for Dividends")
                     try:
                         activities_resp = await self.api.get_activities()
@@ -271,9 +272,14 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                                 sym = act.get("symbol")
                                 
                                 if acc_id and sym:
-                                    qty = float(act.get("quantity") or 0)
-                                    price = float(act.get("unitPrice") or 0)
-                                    amount = qty * price
+                                    # Fix: Pull the exact cash value of the dividend first.
+                                    amount = float(act.get("value") or 0)
+                                    
+                                    # Fallback in case value is zero but quantity/price exist
+                                    if amount == 0:
+                                        qty = float(act.get("quantity") or 0)
+                                        price = float(act.get("unitPrice") or 0)
+                                        amount = qty * price
                                     
                                     if acc_id not in dividend_data:
                                         dividend_data[acc_id] = {}
