@@ -676,23 +676,25 @@ def _extract_yahoo_raw(data):
         else: out[k] = v
     return out
 
-def _calculate_lynch_peg(data, is_pence_glitch=False):
+def _calculate_lynch_peg(data):
     """Calculate the Lynch PEG Ratio using 1y forward growth and dividend yield."""
     try:
-        # Fallback to summaryDetail if defaultKeyStatistics doesn't have it
-        fwd_pe = data.get("defaultKeyStatistics", {}).get("forwardPE", {}).get("raw")
+        currency = data.get("summaryDetail", {}).get("currency") or data.get("financialData", {}).get("currency")
+        is_gbp = (currency == "GBp")
+        
+        # 1. ALWAYS prefer summaryDetail for P/E as Yahoo usually corrects the Pence Glitch natively here
+        fwd_pe = data.get("summaryDetail", {}).get("forwardPE", {}).get("raw")
+        
+        # 2. Fallback to defaultKeyStatistics, but apply the 100x Pence fix if it's a UK stock
         if fwd_pe is None:
-            fwd_pe = data.get("summaryDetail", {}).get("forwardPE", {}).get("raw")
-            
-        # FIX: Correct the Pence Glitch inflation
-        if is_pence_glitch and fwd_pe is not None:
-            fwd_pe = fwd_pe / 100.0
-            
+            fwd_pe = data.get("defaultKeyStatistics", {}).get("forwardPE", {}).get("raw")
+            if is_gbp and fwd_pe is not None:
+                fwd_pe = fwd_pe / 100.0
+                
         div_yield = data.get("summaryDetail", {}).get("dividendYield", {}).get("raw") or 0
         
         trends = data.get("earningsTrend", {}).get("trend", [])
         next_year_growth = None
-        # Safely loop through trends looking for +1y or 1y or even 0y (current year projection)
         for t in trends:
             if t.get("period") in ["+1y", "1y", "0y", "+5y"]:
                 val = t.get("growth", {}).get("raw")
@@ -749,13 +751,11 @@ class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
         if not data:
             return attrs
             
-        # --- 0. Detect the "Pence Glitch" ---
         currency = data.get("summaryDetail", {}).get("currency") or data.get("financialData", {}).get("currency")
-        fin_currency = data.get("financialData", {}).get("financialCurrency")
-        is_pence_glitch = (currency == "GBp" and fin_currency == "GBP")
+        is_gbp = (currency == "GBp")
 
         # --- 1. Valuation & Lynch Logic ---
-        lynch_peg = _calculate_lynch_peg(data, is_pence_glitch)
+        lynch_peg = _calculate_lynch_peg(data)
         attrs["lynch_peg_ratio"] = lynch_peg
         
         if lynch_peg is None:
@@ -770,15 +770,15 @@ class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
         # --- 2. Top-Level Requested Attributes ---
         attrs["standard_peg_ratio"] = data.get("defaultKeyStatistics", {}).get("pegRatio", {}).get("raw")
         
-        fwd_pe = data.get("defaultKeyStatistics", {}).get("forwardPE", {}).get("raw")
+        # Prefer summaryDetail for the explicitly exposed forward_pe attribute
+        fwd_pe = data.get("summaryDetail", {}).get("forwardPE", {}).get("raw")
         if fwd_pe is None:
-            fwd_pe = data.get("summaryDetail", {}).get("forwardPE", {}).get("raw")
-            
-        # FIX: Correct the exposed Forward P/E
-        if is_pence_glitch and fwd_pe is not None:
-            fwd_pe = round(fwd_pe / 100.0, 4)
-            
-        attrs["forward_pe"] = fwd_pe
+            fwd_pe = data.get("defaultKeyStatistics", {}).get("forwardPE", {}).get("raw")
+            if is_gbp and fwd_pe is not None:
+                fwd_pe = fwd_pe / 100.0
+                
+        if fwd_pe is not None:
+            attrs["forward_pe"] = round(fwd_pe, 4)
         
         attrs["dividend_yield"] = data.get("summaryDetail", {}).get("dividendYield", {}).get("raw")
         
@@ -795,17 +795,17 @@ class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
         fin = _extract_yahoo_raw(data.get("financialData", {}))
         summary = _extract_yahoo_raw(data.get("summaryDetail", {}))
         
-        # FIX: Correct other heavily distorted price-to-earnings/book ratios in the raw dump
-        if is_pence_glitch:
-            if "forwardPE" in stats and stats["forwardPE"] is not None:
-                stats["forwardPE"] = round(stats["forwardPE"] / 100.0, 4)
-            if "priceToBook" in stats and stats["priceToBook"] is not None:
-                stats["priceToBook"] = round(stats["priceToBook"] / 100.0, 4)
-            if "trailingPE" in summary and summary["trailingPE"] is not None:
-                summary["trailingPE"] = round(summary["trailingPE"] / 100.0, 4)
+        # FIX: The "Dumb" module (defaultKeyStatistics) always inflates Price-based ratios for GBp stocks.
+        if is_gbp:
+            for key in ["forwardPE", "trailingPE", "priceToBook"]:
+                if key in stats and stats[key] is not None:
+                    stats[key] = round(stats[key] / 100.0, 4)
         
         attrs.update(stats)
-        attrs.update(summary)
+        
+        # Adding summary AFTER stats is intentional. If both modules provide 'forwardPE', 
+        # the "Smart" summaryDetail module will overwrite the "Dumb" defaultKeyStatistics module.
+        attrs.update(summary) 
         attrs.update(fin)
         
         return {k: v for k, v in attrs.items() if not isinstance(v, (dict, list))}
