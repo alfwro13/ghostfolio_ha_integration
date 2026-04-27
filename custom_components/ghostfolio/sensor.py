@@ -56,6 +56,7 @@ async def async_setup_entry(
             GhostfolioNetPerformanceWithCurrencySensor(coordinator, config_entry),
             GhostfolioTimeWeightedReturnFXSensor(coordinator, config_entry),
             GhostfolioSimpleGainPercentSensor(coordinator, config_entry),
+            GhostfolioPortfolioDividendSensor(coordinator, config_entry),
         ]
         async_add_entities(global_sensors)
         for s in global_sensors:
@@ -80,6 +81,7 @@ async def async_setup_entry(
                     GhostfolioAccountPerformanceSensor(coordinator, config_entry, account),
                     GhostfolioAccountTWRSensor(coordinator, config_entry, account),
                     GhostfolioAccountSimpleGainSensor(coordinator, config_entry, account),
+                    GhostfolioAccountDividendSensor(coordinator, config_entry, account),
                 ]
                 for sens in account_sensors:
                     if sens.unique_id not in known_ids:
@@ -286,6 +288,26 @@ class GhostfolioSimpleGainPercentSensor(GhostfolioBaseSensor):
         if current_value is None or total_investment is None or total_investment == 0: return None
         return round(((current_value - total_investment) / total_investment) * 100, 2)
 
+class GhostfolioPortfolioDividendSensor(GhostfolioBaseSensor):
+    _attr_name = "Portfolio Total Dividend"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_suggested_display_precision = 2
+    def __init__(self, coordinator, config_entry):
+        super().__init__(coordinator, config_entry)
+        self._attr_unique_id = f"ghostfolio_portfolio_dividends_{config_entry.entry_id}"
+    @property
+    def native_value(self) -> float | None:
+        if not self.coordinator.data: return None
+        dividends = self.coordinator.data.get("dividends", {})
+        
+        total = 0.0
+        # Iterate over all accounts, and sum all dividend payments in those accounts
+        for acc_divs in dividends.values():
+            total += sum(acc_divs.values())
+            
+        return total
+
 # --- PER-ACCOUNT SENSORS ---
 
 class GhostfolioAccountBaseSensor(GhostfolioBaseSensor):
@@ -402,6 +424,23 @@ class GhostfolioAccountSimpleGainSensor(GhostfolioAccountBaseSensor):
         total_investment = self.account_performance_data.get("totalInvestment")
         if current_value is None or total_investment is None or total_investment == 0: return None
         return round(((current_value - total_investment) / total_investment) * 100, 2)
+
+class GhostfolioAccountDividendSensor(GhostfolioAccountBaseSensor):
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_suggested_display_precision = 2
+    def __init__(self, coordinator, config_entry, account_data):
+        super().__init__(coordinator, config_entry, account_data)
+        self._attr_unique_id = f"ghostfolio_account_dividends_{self.account_id}_{config_entry.entry_id}"
+        self._attr_name = f"{self.account_name} Total Dividends"
+    @property
+    def native_value(self) -> float | None:
+        if not self.coordinator.data: return None
+        dividends = self.coordinator.data.get("dividends", {})
+        
+        # Get dividends specific to this account ID
+        acc_divs = dividends.get(self.account_id, {})
+        return sum(acc_divs.values())
 
 # --- PER-HOLDING SENSORS ---
 
