@@ -3,6 +3,7 @@
 </div>
 
 ![Total Downloads](https://img.shields.io/github/downloads/alfwro13/ghostfolio_ha_integration/total)
+![Latest Release Downloads](https://img.shields.io/github/downloads/alfwro13/ghostfolio_ha_integration/latest/total)
 
 # Ghostfolio Home Assistant Integration
 
