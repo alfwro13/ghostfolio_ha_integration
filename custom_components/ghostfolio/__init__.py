@@ -252,52 +252,51 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
 
             # --- Dividends Enrichment (On Boot & Daily) ---
             now = dt_util.utcnow()
-            if show_holdings:
-                if self.last_dividends_update is None or not self.dividends_cache or (now - self.last_dividends_update) > timedelta(hours=24):
-                    _LOGGER.debug("Fetching Activities data for Dividends")
-                    try:
-                        activities_resp = await self.api.get_activities()
-                        dividend_data = {}
+            if self.last_dividends_update is None or not self.dividends_cache or (now - self.last_dividends_update) > timedelta(hours=24):
+                _LOGGER.debug("Fetching Activities data for Dividends")
+                try:
+                    activities_resp = await self.api.get_activities()
+                    dividend_data = {}
+                    
+                    # Handle both Array and Dictionary responses safely
+                    act_list = []
+                    if isinstance(activities_resp, list):
+                        act_list = activities_resp
+                    elif isinstance(activities_resp, dict):
+                        act_list = activities_resp.get("activities", [])
                         
-                        # Handle both Array and Dictionary responses safely
-                        act_list = []
-                        if isinstance(activities_resp, list):
-                            act_list = activities_resp
-                        elif isinstance(activities_resp, dict):
-                            act_list = activities_resp.get("activities", [])
+                    for act in act_list:
+                        act_type = act.get("type", "").upper()
+                        if act_type == "DIVIDEND":
+                            acc_id = act.get("accountId")
                             
-                        for act in act_list:
-                            act_type = act.get("type", "").upper()
-                            if act_type == "DIVIDEND":
-                                acc_id = act.get("accountId")
+                            # Try standard symbol, fallback to nested relation
+                            sym = act.get("symbol")
+                            if not sym and "SymbolProfile" in act:
+                                sym = act["SymbolProfile"].get("symbol")
+                            
+                            if acc_id and sym:
+                                sym = sym.upper() # Ensure case match
                                 
-                                # Try standard symbol, fallback to nested relation
-                                sym = act.get("symbol")
-                                if not sym and "SymbolProfile" in act:
-                                    sym = act["SymbolProfile"].get("symbol")
+                                # Prioritize value in the account's Base Currency
+                                amount = float(act.get("valueInBaseCurrency") or 0)
                                 
-                                if acc_id and sym:
-                                    sym = sym.upper() # Ensure case match
-                                    
-                                    # Prioritize value in the account's Base Currency
-                                    amount = float(act.get("valueInBaseCurrency") or 0)
-                                    
-                                    if amount == 0:
-                                        amount = float(act.get("value") or 0)
-                                    if amount == 0:
-                                        qty = float(act.get("quantity") or 0)
-                                        price = float(act.get("unitPrice") or 0)
-                                        amount = qty * price
-                                    
-                                    if acc_id not in dividend_data:
-                                        dividend_data[acc_id] = {}
-                                    
-                                    dividend_data[acc_id][sym] = dividend_data[acc_id].get(sym, 0.0) + amount
-                        
-                        self.dividends_cache = dividend_data
-                        self.last_dividends_update = now
-                    except Exception as e:
-                        _LOGGER.error(f"Failed to fetch activities for dividends: {e}")
+                                if amount == 0:
+                                    amount = float(act.get("value") or 0)
+                                if amount == 0:
+                                    qty = float(act.get("quantity") or 0)
+                                    price = float(act.get("unitPrice") or 0)
+                                    amount = qty * price
+                                
+                                if acc_id not in dividend_data:
+                                    dividend_data[acc_id] = {}
+                                
+                                dividend_data[acc_id][sym] = dividend_data[acc_id].get(sym, 0.0) + amount
+                    
+                    self.dividends_cache = dividend_data
+                    self.last_dividends_update = now
+                except Exception as e:
+                    _LOGGER.error(f"Failed to fetch activities for dividends: {e}")
 
             data["dividends"] = self.dividends_cache
 
@@ -381,7 +380,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             valid_unique_ids.add(f"ghostfolio_net_performance_percent_with_currency_{entry_id}")
             valid_unique_ids.add(f"ghostfolio_net_performance_with_currency_{entry_id}")
             valid_unique_ids.add(f"ghostfolio_simple_gain_percent_{entry_id}")
-            valid_unique_ids.add(f"ghostfolio_portfolio_dividends_{entry_id}") # NEW
+            valid_unique_ids.add(f"ghostfolio_portfolio_dividends_{entry_id}")
 
         valid_unique_ids.add(f"ghostfolio_server_status_{entry_id}")
         for provider in DATA_PROVIDERS:
@@ -403,7 +402,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 valid_unique_ids.add(f"ghostfolio_account_perf_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_perf_pct_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_simple_gain_{account_id}_{entry_id}")
-                valid_unique_ids.add(f"ghostfolio_account_dividends_{account_id}_{entry_id}") # NEW
+                valid_unique_ids.add(f"ghostfolio_account_dividends_{account_id}_{entry_id}")
 
         if self.entry.data.get(CONF_SHOW_HOLDINGS, True):
             all_holdings = self.data.get("account_holdings", {})
