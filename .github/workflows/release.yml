@@ -70,6 +70,14 @@ jobs:
             echo "EOF"
           } >> $GITHUB_OUTPUT
 
+      # --- NEW STEP: Zip the integration ---
+      - name: Zip integration
+        if: steps.tag_check.outputs.exists == 'false'
+        run: |
+          cd custom_components/ghostfolio
+          zip -r ../../ghostfolio.zip ./*
+          cd ../..
+
       - name: Create Release
         if: steps.tag_check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v1
@@ -86,6 +94,7 @@ jobs:
             Full Changelog: https://github.com/alfwro13/ghostfolio_ha_integration/compare/${{ steps.previous_version.outputs.tag }}...${{ steps.version.outputs.tag }}
           draft: false
           prerelease: ${{ steps.version.outputs.prerelease }}
+          files: ghostfolio.zip # --- NEW STEP: Upload the zip asset ---
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
