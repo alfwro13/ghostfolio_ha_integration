@@ -174,6 +174,13 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
             for h in holdings:
                 if float(h.get("quantity") or 0) > 0:
                      if self._is_provider_down(h.get("dataSource")): return False
+                     
+                     # --- DATA ANOMALY CHECK ---
+                     # Ensure we don't process glitched prices dropping to 0 or negative
+                     val = float(h.get("valueInBaseCurrency") or h.get("value") or 0)
+                     price = float(h.get("marketPrice") or 0)
+                     if val <= 0 or price <= 0: return False
+                     
         return True
 
 
@@ -298,6 +305,7 @@ class GhostfolioPortfolioDividendSensor(GhostfolioBaseSensor):
         self._attr_unique_id = f"ghostfolio_portfolio_dividends_{config_entry.entry_id}"
     @property
     def native_value(self) -> float | None:
+        if not self.is_portfolio_healthy: return None
         if not self.coordinator.data: return None
         dividends = self.coordinator.data.get("dividends", {})
         
@@ -335,6 +343,12 @@ class GhostfolioAccountBaseSensor(GhostfolioBaseSensor):
         for h in account_holdings:
             if float(h.get("quantity") or 0) > 0:
                  if self._is_provider_down(h.get("dataSource")): return False
+                 
+                 # --- DATA ANOMALY CHECK ---
+                 val = float(h.get("valueInBaseCurrency") or h.get("value") or 0)
+                 price = float(h.get("marketPrice") or 0)
+                 if val <= 0 or price <= 0: return False
+                 
         return True
 
 class GhostfolioAccountValueSensor(GhostfolioAccountBaseSensor):
@@ -435,6 +449,7 @@ class GhostfolioAccountDividendSensor(GhostfolioAccountBaseSensor):
         self._attr_name = f"{self.account_name} Total Dividends"
     @property
     def native_value(self) -> float | None:
+        if not self.is_account_healthy: return None
         if not self.coordinator.data: return None
         dividends = self.coordinator.data.get("dividends", {})
         
@@ -491,7 +506,15 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         data = self.holding_data
         if not data: return None
         if self._is_provider_down(data.get("dataSource")): return None
-        return data.get("valueInBaseCurrency") or data.get("value")
+        
+        # --- DATA ANOMALY CHECK ---
+        val = data.get("valueInBaseCurrency") or data.get("value")
+        price = float(data.get("marketPrice") or 0)
+        
+        if val is None or float(val) <= 0 or price <= 0: 
+            return None
+            
+        return float(val)
 
     def _get_limit_state(self, limit_type: str, current_value: float, compare_op):
         registry = er.async_get(self.hass)
@@ -634,9 +657,16 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
         data = self.item_data
         if not data: return None
         if self._is_provider_down(self.data_source): return None
+        
         val = data.get("marketPrice")
-        if data.get("currency") == "GBp" and val is not None: return val / 100
+        
+        # --- DATA ANOMALY CHECK ---
+        if val is None or float(val) <= 0: 
+            return None
+            
+        if data.get("currency") == "GBp": return val / 100
         return val
+        
     @property
     def native_unit_of_measurement(self) -> str | None:
         data = self.item_data
