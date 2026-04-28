@@ -1,4 +1,5 @@
 {
   "name": "Ghostfolio HA Integration",
-  "homeassistant": "2025.6.0"
+  "homeassistant": "2025.6.0",
+  "zip_release": true
 }
