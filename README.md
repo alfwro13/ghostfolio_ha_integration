@@ -2,6 +2,8 @@
    <img src="https://brands.home-assistant.io/ghostfolio/icon.png" alt="Ghostfolio Logo" width="120" height="120">
 </div>
 
+![Total Downloads](https://img.shields.io/github/downloads/alfwro13/ghostfolio_ha_integration/total)
+
 # Ghostfolio Home Assistant Integration
 
 A Home Assistant Custom Component (HACS integration) for monitoring your [Ghostfolio](https://github.com/ghostfolio/ghostfolio) portfolio performance. This integration works with any Ghostfolio instance, but if you prefer an all-in-one solution, you can run Ghostfolio directly on your server using the [Home Assistant Add-on](https://github.com/alfwro13/ha-addon-ghostfolio).
