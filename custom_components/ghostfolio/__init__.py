@@ -125,26 +125,36 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 history = market_data_resp.get("marketData", [])
                 
                 if history and isinstance(history, list) and len(history) > 0:
-                    # 1. Use the real-time price already on the item, fallback to latest history if missing
                     real_time_price = float(item.get("marketPrice") or 0)
-                    if not real_time_price:
-                        real_time_price = float(history[-1].get("marketPrice") or 0)
+                    hist_latest_price = float(history[-1].get("marketPrice") or 0)
                     
-                    # 2. Find the previous close to compare against
+                    if not real_time_price:
+                        real_time_price = hist_latest_price
+                    
+                    # 2. Find the robust previous close using strict dates
+                    today_str = dt_util.utcnow().date().isoformat()
+                    latest_hist_date = history[-1].get("date", "")[:10]
+                    
+                    # Determine the active trading date boundary
+                    if latest_hist_date >= today_str:
+                        target_date = latest_hist_date
+                    else:
+                        if abs(real_time_price - hist_latest_price) < 0.0001:
+                            target_date = latest_hist_date
+                        else:
+                            target_date = today_str
+                            
                     prev_price = 0
                     
-                    # Iterate backwards through history to find the first price that differs from real_time_price
-                    # This safely skips weekends or days where Ghostfolio already appended today's price to history
-                    for i in range(1, min(len(history) + 1, 6)):
-                        hist_price = float(history[-i].get("marketPrice") or 0)
-                        if hist_price > 0 and hist_price != real_time_price:
-                            prev_price = hist_price
+                    # Look backwards for the first price from a previous calendar day
+                    for entry in reversed(history):
+                        entry_date = entry.get("date", "")[:10]
+                        if entry_date and entry_date < target_date:
+                            prev_price = float(entry.get("marketPrice") or 0)
                             break
                             
-                    # If we couldn't find a different price (e.g. price hasn't moved in days),
-                    # fallback to the immediate last history item so change equals 0
-                    if prev_price == 0 and len(history) > 0:
-                        prev_price = float(history[-1].get("marketPrice") or 0)
+                    if prev_price == 0:
+                        prev_price = hist_latest_price
 
                     # 3. Calculate accurate change
                     if prev_price > 0 and real_time_price > 0:
