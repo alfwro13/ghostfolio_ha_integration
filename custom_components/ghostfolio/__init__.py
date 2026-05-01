@@ -172,11 +172,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         """Fetch data from Ghostfolio API."""
         
         if not self._cache_loaded:
-
-    async def _async_update_data(self):
-        """Fetch data from Ghostfolio API."""
-        
-        if not self._cache_loaded:
             stored_data = await self._store.async_load()
             if stored_data:
                 self.fundamentals_cache = stored_data.get("data", {})
