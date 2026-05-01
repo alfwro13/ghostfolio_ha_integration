@@ -114,7 +114,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.debug(f"Yahoo crumb fetch failed: {e}")
         return None
 
-async def _enrich_item_with_market_data(self, item: dict) -> dict:
+    async def _enrich_item_with_market_data(self, item: dict) -> dict:
         """Fetch market data to calculate 24h change and enrich an asset or watchlist item."""
         symbol = item.get("symbol")
         data_source = item.get("dataSource")
@@ -167,6 +167,11 @@ async def _enrich_item_with_market_data(self, item: dict) -> dict:
                 _LOGGER.debug(f"Failed to enrich item {symbol}: {err}")
                 
         return item
+
+    async def _async_update_data(self):
+        """Fetch data from Ghostfolio API."""
+        
+        if not self._cache_loaded:
 
     async def _async_update_data(self):
         """Fetch data from Ghostfolio API."""
