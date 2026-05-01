@@ -123,30 +123,36 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             try:
                 market_data_resp = await self.api.get_market_data(data_source, symbol)
                 history = market_data_resp.get("marketData", [])
+                profile = market_data_resp.get("assetProfile", {})
                 
-                if history and isinstance(history, list) and len(history) > 0:
-                    real_time_price = float(item.get("marketPrice") or 0)
-                    hist_latest_price = float(history[-1].get("marketPrice") or 0)
+                real_time_price = float(item.get("marketPrice") or 0)
+                if not real_time_price and history:
+                    real_time_price = float(history[-1].get("marketPrice") or 0)
                     
-                    if not real_time_price:
-                        real_time_price = hist_latest_price
-                    
-                    # 2. Find the robust previous close using strict dates
+                change_pct = None
+                
+                # 1. Fetch exact percentage directly from Yahoo Finance API to bypass Ghostfolio lag
+                if data_source == "YAHOO":
+                    try:
+                        session = self.api._get_session()
+                        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                        quote_url = f"https://query1.finance.yahoo.com/v8/finance/quote?symbols={symbol}"
+                        async with session.get(quote_url, headers=headers) as quote_resp:
+                            if quote_resp.status == 200:
+                                quote_data = await quote_resp.json()
+                                result = quote_data.get("quoteResponse", {}).get("result", [])
+                                if result:
+                                    change_pct = result[0].get("regularMarketChangePercent")
+                    except Exception as e:
+                        _LOGGER.debug(f"Direct Yahoo quote fetch failed for {symbol}: {e}")
+
+                # 2. Fallback to Ghostfolio's historical array if Yahoo fails or for other providers
+                if change_pct is None and history:
                     today_str = dt_util.utcnow().date().isoformat()
                     latest_hist_date = history[-1].get("date", "")[:10]
-                    
-                    # Determine the active trading date boundary
-                    if latest_hist_date >= today_str:
-                        target_date = latest_hist_date
-                    else:
-                        if abs(real_time_price - hist_latest_price) < 0.0001:
-                            target_date = latest_hist_date
-                        else:
-                            target_date = today_str
+                    target_date = latest_hist_date if latest_hist_date >= today_str else today_str
                             
                     prev_price = 0
-                    
-                    # Look backwards for the first price from a previous calendar day
                     for entry in reversed(history):
                         entry_date = entry.get("date", "")[:10]
                         if entry_date and entry_date < target_date:
@@ -154,20 +160,21 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                             break
                             
                     if prev_price == 0:
-                        prev_price = hist_latest_price
+                        prev_price = float(history[-1].get("marketPrice") or 0)
 
-                    # 3. Calculate accurate change
                     if prev_price > 0 and real_time_price > 0:
-                        change_val = real_time_price - prev_price
-                        change_pct = (change_val / prev_price) * 100
-                        item["marketChange"] = change_val
-                        item["marketChangePercentage"] = change_pct
-                    
-                    if "marketPrice" not in item or not item["marketPrice"]:
-                        item["marketPrice"] = real_time_price
+                        change_pct = ((real_time_price - prev_price) / prev_price) * 100
+
+                # 3. Apply the data securely
+                if change_pct is not None:
+                    item["marketChangePercentage"] = change_pct
+                    # Calculate absolute change scaled perfectly to Ghostfolio's unit (Pounds vs Pence)
+                    item["marketChange"] = real_time_price - (real_time_price / (1 + (change_pct / 100)))
+
+                item["marketPrice"] = real_time_price
+                if history:
                     item["marketDate"] = history[-1].get("date")
                 
-                profile = market_data_resp.get("assetProfile", {})
                 if not item.get("currency"):
                     item["currency"] = profile.get("currency")
                 if not item.get("assetClass"):
