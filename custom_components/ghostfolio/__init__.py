@@ -114,7 +114,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.debug(f"Yahoo crumb fetch failed: {e}")
         return None
 
-    async def _enrich_item_with_market_data(self, item: dict) -> dict:
+async def _enrich_item_with_market_data(self, item: dict) -> dict:
         """Fetch market data to calculate 24h change and enrich an asset or watchlist item."""
         symbol = item.get("symbol")
         data_source = item.get("dataSource")
@@ -125,35 +125,37 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 history = market_data_resp.get("marketData", [])
                 
                 if history and isinstance(history, list) and len(history) > 0:
-                    latest_idx = -1
-                    max_lookback = 5
-                    lookback_count = 0
+                    # 1. Use the real-time price already on the item, fallback to latest history if missing
+                    real_time_price = float(item.get("marketPrice") or 0)
+                    if not real_time_price:
+                        real_time_price = float(history[-1].get("marketPrice") or 0)
                     
-                    current_entry = history[latest_idx]
-                    current_price = float(current_entry.get("marketPrice") or 0)
-
-                    while lookback_count < max_lookback and abs(latest_idx) < len(history):
-                        prev_idx = latest_idx - 1
-                        prev_entry = history[prev_idx]
-                        prev_price = float(prev_entry.get("marketPrice") or 0)
-                        if current_price != prev_price:
+                    # 2. Find the previous close to compare against
+                    prev_price = 0
+                    
+                    # Iterate backwards through history to find the first price that differs from real_time_price
+                    # This safely skips weekends or days where Ghostfolio already appended today's price to history
+                    for i in range(1, min(len(history) + 1, 6)):
+                        hist_price = float(history[-i].get("marketPrice") or 0)
+                        if hist_price > 0 and hist_price != real_time_price:
+                            prev_price = hist_price
                             break
-                        latest_idx -= 1
-                        lookback_count += 1
-                        current_entry = history[latest_idx]
+                            
+                    # If we couldn't find a different price (e.g. price hasn't moved in days),
+                    # fallback to the immediate last history item so change equals 0
+                    if prev_price == 0 and len(history) > 0:
+                        prev_price = float(history[-1].get("marketPrice") or 0)
 
-                    if abs(latest_idx - 1) <= len(history):
-                        prev_entry = history[latest_idx - 1]
-                        prev_price = float(prev_entry.get("marketPrice") or 0)
-                        if prev_price > 0:
-                            change_val = current_price - prev_price
-                            change_pct = (change_val / prev_price) * 100
-                            item["marketChange"] = change_val
-                            item["marketChangePercentage"] = change_pct
+                    # 3. Calculate accurate change
+                    if prev_price > 0 and real_time_price > 0:
+                        change_val = real_time_price - prev_price
+                        change_pct = (change_val / prev_price) * 100
+                        item["marketChange"] = change_val
+                        item["marketChangePercentage"] = change_pct
                     
                     if "marketPrice" not in item or not item["marketPrice"]:
-                        item["marketPrice"] = current_price
-                    item["marketDate"] = current_entry.get("date")
+                        item["marketPrice"] = real_time_price
+                    item["marketDate"] = history[-1].get("date")
                 
                 profile = market_data_resp.get("assetProfile", {})
                 if not item.get("currency"):
