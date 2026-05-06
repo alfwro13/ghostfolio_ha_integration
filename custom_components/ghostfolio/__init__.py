@@ -340,7 +340,47 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                     # we can simply subtract to get exact pence/pounds change without messy conversions.
                     item["marketChange"] = real_time_price - prev_price
 
-                item["marketPrice"] = real_time_price
+                # ==========================================
+                # BULLETPROOF PRE-MARKET OVERRIDE
+                # ==========================================
+                
+                # TODO: Inject your premarket fetching logic here.
+                # If your service is not running, or returns None, the safeguard below
+                # prevents any modifications and Ghostfolio's native data passes through.
+                premarket_price = None  
+                
+                # SAFEGUARD: Override only runs if pre-market price is fetched, valid, and different
+                if premarket_price is not None and float(premarket_price) > 0 and float(premarket_price) != real_time_price:
+                    premarket_price = float(premarket_price)
+                    quantity = float(item.get("quantity") or 0)
+                    original_value_base = float(item.get("valueInBaseCurrency") or item.get("value") or 0)
+                    
+                    if real_time_price > 0 and quantity > 0:
+                        # 1. Extract the exact currency conversion rate Ghostfolio natively used
+                        implied_fx_rate = original_value_base / (real_time_price * quantity)
+                        
+                        # 2. Calculate the updated holding values based on the premarket price
+                        new_value_asset_currency = premarket_price * quantity
+                        new_value_base_currency = new_value_asset_currency * implied_fx_rate
+                        
+                        # 3. Override the main dictionary keys. HA sensors use these automatically.
+                        item["marketPrice"] = premarket_price
+                        item["value"] = new_value_asset_currency
+                        item["valueInBaseCurrency"] = new_value_base_currency
+                        
+                        # 4. Optional: Recalculate 24h change so the % matches the pre-market movement
+                        if prev_price > 0:
+                            item["marketChangePercentage"] = ((premarket_price - prev_price) / prev_price) * 100
+                            item["marketChange"] = premarket_price - prev_price
+                            
+                        item["is_premarket"] = True
+                        _LOGGER.debug(f"[{symbol}] State overridden with premarket price: {premarket_price}")
+                else:
+                    # Regular market hours: Ensure standard pricing is set and no native values are touched
+                    item["marketPrice"] = real_time_price
+                    item["is_premarket"] = False
+                # ==========================================
+
                 if history:
                     item["marketDate"] = history[-1].get("date")
                 
