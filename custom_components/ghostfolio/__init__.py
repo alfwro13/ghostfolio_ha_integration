@@ -50,20 +50,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # --- Register Custom Service for On-Demand Refresh ---
+    # --- Register Custom Services for Manual Fetches ---
     async def refresh_fundamentals(call):
-        """Force a refresh of Yahoo Finance caches."""
         for e in hass.config_entries.async_entries(DOMAIN):
             if hasattr(e, "runtime_data"):
                 coord = e.runtime_data
                 if isinstance(coord, GhostfolioDataUpdateCoordinator):
-                    _LOGGER.info("Forcing on-demand refresh of Yahoo Caches")
-                    coord.last_fundamentals_update = None
-                    coord.last_previous_close_update = None
+                    await coord.async_fetch_fundamentals()
+                    await coord.async_request_refresh()
+
+    async def fetch_24h_change(call):
+        for e in hass.config_entries.async_entries(DOMAIN):
+            if hasattr(e, "runtime_data"):
+                coord = e.runtime_data
+                if isinstance(coord, GhostfolioDataUpdateCoordinator):
+                    await coord.async_fetch_24h_change()
+                    await coord.async_request_refresh()
+
+    async def fetch_premarket_data(call):
+        for e in hass.config_entries.async_entries(DOMAIN):
+            if hasattr(e, "runtime_data"):
+                coord = e.runtime_data
+                if isinstance(coord, GhostfolioDataUpdateCoordinator):
+                    await coord.async_fetch_premarket()
                     await coord.async_request_refresh()
 
     if not hass.services.has_service(DOMAIN, "refresh_fundamentals"):
         hass.services.async_register(DOMAIN, "refresh_fundamentals", refresh_fundamentals)
+    if not hass.services.has_service(DOMAIN, "fetch_24h_change"):
+        hass.services.async_register(DOMAIN, "fetch_24h_change", fetch_24h_change)
+    if not hass.services.has_service(DOMAIN, "fetch_premarket_data"):
+        hass.services.async_register(DOMAIN, "fetch_premarket_data", fetch_premarket_data)
 
     return True
 
@@ -94,6 +111,8 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         
         self.previous_close_cache = {}
         self.last_previous_close_update = None
+
+        self.premarket_cache = {}
 
         self.dividends_cache = {}
         self.last_dividends_update = None
@@ -131,8 +150,143 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             
         await self._store.async_save(payload)
 
+    def _get_active_yahoo_symbols(self, us_only=False) -> list[str]:
+        """Extract all Yahoo symbols currently tracked in the coordinator's data."""
+        tickers = set()
+        if not self.data:
+            return []
+            
+        holdings = self.data.get("account_holdings", {})
+        for acc_holdings in holdings.values():
+            for h in acc_holdings:
+                if float(h.get("quantity") or 0) > 0 and h.get("dataSource") == "YAHOO":
+                    sym = h.get("symbol")
+                    if sym:
+                        if us_only and "." in sym:
+                            continue
+                        tickers.add(sym)
+                        
+        for w in self.data.get("watchlist", []):
+            if w.get("dataSource") == "YAHOO":
+                sym = w.get("symbol")
+                if sym:
+                    if us_only and "." in sym:
+                        continue
+                    tickers.add(sym)
+                    
+        return list(tickers)
+
+    async def async_fetch_premarket(self):
+        """Manually fetch Pre-market data for US stocks using bulk API."""
+        _LOGGER.info("Manually fetching Pre-Market data from Yahoo")
+        tickers = self._get_active_yahoo_symbols(us_only=True)
+        if not tickers:
+            return
+            
+        symbol_string = ",".join(tickers)
+        url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol_string}"
+        
+        try:
+            session = self.api._get_session()
+            crumb = await self._get_yahoo_crumb(session)
+            if crumb:
+                url += f"&crumb={crumb}"
+                
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            async with session.get(url, headers=headers) as response:
+                if response.status == 200:
+                    resp_json = await response.json()
+                    results = resp_json.get("quoteResponse", {}).get("result", [])
+                    for res in results:
+                        sym = res.get("symbol")
+                        state = res.get("marketState", "")
+                        price = None
+                        
+                        if "PRE" in state:
+                            price = res.get("preMarketPrice")
+                        elif "POST" in state or state == "CLOSED":
+                            price = res.get("postMarketPrice") or res.get("regularMarketPrice")
+                        elif state == "REGULAR":
+                            price = res.get("regularMarketPrice")
+                            
+                        if price is not None and sym:
+                            self.premarket_cache[sym] = float(price)
+        except Exception as e:
+            _LOGGER.error(f"Failed pre-market fetch process: {e}")
+
+    async def async_fetch_24h_change(self):
+        """Manually fetch previous close using sequential API calls."""
+        _LOGGER.info("Manually fetching 24h Change (Previous Close) from Yahoo")
+        tickers = self._get_active_yahoo_symbols()
+        if not tickers: 
+            return
+            
+        try:
+            session = self.api._get_session()
+            crumb = await self._get_yahoo_crumb(session)
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            
+            for ticker in tickers:
+                url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=price"
+                if crumb: 
+                    url += f"&crumb={crumb}"
+                    
+                try:
+                    async with session.get(url, headers=headers) as response:
+                        if response.status == 200:
+                            resp_json = await response.json()
+                            res = resp_json.get("quoteSummary", {}).get("result", [])
+                            if res:
+                                price_data = res[0].get("price", {})
+                                prev_close = price_data.get("regularMarketPreviousClose", {}).get("raw")
+                                if prev_close is not None:
+                                    self.previous_close_cache[ticker] = prev_close
+                except Exception as e:
+                    _LOGGER.debug(f"Failed to fetch previous close for {ticker}: {e}")
+                    
+                await asyncio.sleep(0.5)
+                
+            self.last_previous_close_update = dt_util.utcnow()
+            await self._save_cache()
+        except Exception as e:
+            _LOGGER.error(f"Failed 24h change fetch process: {e}")
+
+    async def async_fetch_fundamentals(self):
+        """Manually fetch deep fundamentals using sequential API calls."""
+        _LOGGER.info("Manually fetching Fundamentals from Yahoo")
+        tickers = self._get_active_yahoo_symbols()
+        if not tickers: 
+            return
+            
+        try:
+            session = self.api._get_session()
+            crumb = await self._get_yahoo_crumb(session)
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            
+            for ticker in tickers:
+                url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=defaultKeyStatistics,financialData,summaryDetail,earningsTrend"
+                if crumb: 
+                    url += f"&crumb={crumb}"
+                    
+                try:
+                    async with session.get(url, headers=headers) as response:
+                        if response.status == 200:
+                            resp_json = await response.json()
+                            res = resp_json.get("quoteSummary", {}).get("result", [])
+                            if res:
+                                self.fundamentals_cache[ticker] = res[0]
+                except Exception as e:
+                    _LOGGER.debug(f"Failed to fetch fundamentals for {ticker}: {e}")
+                    
+                await asyncio.sleep(0.5)
+                
+            self.last_fundamentals_update = dt_util.utcnow()
+            await self._save_cache()
+        except Exception as e:
+            _LOGGER.error(f"Failed fundamentals fetch process: {e}")
+
     async def _enrich_item_with_market_data(self, item: dict) -> dict:
-        """Enrich an asset or watchlist item with 24h change using cached Previous Close."""
+        """Enrich an asset or watchlist item."""
         symbol = item.get("symbol")
         data_source = item.get("dataSource")
         
@@ -145,17 +299,23 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 real_time_price = float(item.get("marketPrice") or 0)
                 if not real_time_price and history:
                     real_time_price = float(history[-1].get("marketPrice") or 0)
+
+                # --- 1. PRE-MARKET OVERRIDE ---
+                # Check ephemeral cache populated by the fetch_premarket service
+                if data_source == "YAHOO" and symbol in self.premarket_cache:
+                    real_time_price = self.premarket_cache[symbol]
                     
                 change_pct = None
                 prev_price = 0
                 
-                # 1. Primary Method: Use 24h Cached Yahoo Previous Close
+                # --- 2. PRIMARY METHOD: CACHED PREVIOUS CLOSE ---
                 if data_source == "YAHOO" and symbol in self.previous_close_cache:
                     prev_price = self.previous_close_cache[symbol]
                     if prev_price > 0 and real_time_price > 0:
                         change_pct = ((real_time_price - prev_price) / prev_price) * 100
 
-                # 2. Fallback Method: Strict Date Historical Array (For Crypto / Non-Yahoo)
+                # --- 3. FALLBACK METHOD: GHOSTFOLIO HISTORY ---
+                # Always safely triggers if the service has never been run or it's a crypto coin
                 if change_pct is None and history:
                     today_str = dt_util.utcnow().date().isoformat()
                     latest_hist_date = history[-1].get("date", "")[:10]
@@ -173,13 +333,54 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                     if prev_price > 0 and real_time_price > 0:
                         change_pct = ((real_time_price - prev_price) / prev_price) * 100
 
-                # 3. Apply Local Math
+                # --- 4. APPLY DATA ---
                 if change_pct is not None:
                     item["marketChangePercentage"] = change_pct
-                    # Because prev_price and real_time_price are in identical units (e.g. Pence), standard math works
+                    # Because prev_price and real_time_price are mathematically uniform, 
+                    # we can simply subtract to get exact pence/pounds change without messy conversions.
                     item["marketChange"] = real_time_price - prev_price
 
-                item["marketPrice"] = real_time_price
+                # ==========================================
+                # BULLETPROOF PRE-MARKET OVERRIDE
+                # ==========================================
+                
+                # TODO: Inject your premarket fetching logic here.
+                # If your service is not running, or returns None, the safeguard below
+                # prevents any modifications and Ghostfolio's native data passes through.
+                premarket_price = None  
+                
+                # SAFEGUARD: Override only runs if pre-market price is fetched, valid, and different
+                if premarket_price is not None and float(premarket_price) > 0 and float(premarket_price) != real_time_price:
+                    premarket_price = float(premarket_price)
+                    quantity = float(item.get("quantity") or 0)
+                    original_value_base = float(item.get("valueInBaseCurrency") or item.get("value") or 0)
+                    
+                    if real_time_price > 0 and quantity > 0:
+                        # 1. Extract the exact currency conversion rate Ghostfolio natively used
+                        implied_fx_rate = original_value_base / (real_time_price * quantity)
+                        
+                        # 2. Calculate the updated holding values based on the premarket price
+                        new_value_asset_currency = premarket_price * quantity
+                        new_value_base_currency = new_value_asset_currency * implied_fx_rate
+                        
+                        # 3. Override the main dictionary keys. HA sensors use these automatically.
+                        item["marketPrice"] = premarket_price
+                        item["value"] = new_value_asset_currency
+                        item["valueInBaseCurrency"] = new_value_base_currency
+                        
+                        # 4. Optional: Recalculate 24h change so the % matches the pre-market movement
+                        if prev_price > 0:
+                            item["marketChangePercentage"] = ((premarket_price - prev_price) / prev_price) * 100
+                            item["marketChange"] = premarket_price - prev_price
+                            
+                        item["is_premarket"] = True
+                        _LOGGER.debug(f"[{symbol}] State overridden with premarket price: {premarket_price}")
+                else:
+                    # Regular market hours: Ensure standard pricing is set and no native values are touched
+                    item["marketPrice"] = real_time_price
+                    item["is_premarket"] = False
+                # ==========================================
+
                 if history:
                     item["marketDate"] = history[-1].get("date")
                 
@@ -196,6 +397,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Fetch data from Ghostfolio API."""
         
+        # Load long-term cache exactly once on boot
         if not self._cache_loaded:
             stored_data = await self._store.async_load()
             if stored_data:
@@ -203,12 +405,10 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 self.previous_close_cache = stored_data.get("previous_close_data", {})
                 
                 f_up = stored_data.get("last_fundamentals_update", stored_data.get("last_update"))
-                if f_up:
-                    self.last_fundamentals_update = dt_util.parse_datetime(f_up)
+                if f_up: self.last_fundamentals_update = dt_util.parse_datetime(f_up)
                     
                 p_up = stored_data.get("last_previous_close_update")
-                if p_up:
-                    self.last_previous_close_update = dt_util.parse_datetime(p_up)
+                if p_up: self.last_previous_close_update = dt_util.parse_datetime(p_up)
 
             self._cache_loaded = True
 
@@ -232,12 +432,11 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             account_performances = {}
             raw_account_holdings = {}
             raw_watchlist_items = []
-            all_yahoo_tickers = set()
             
             show_holdings = self.entry.data.get(CONF_SHOW_HOLDINGS, True)
             show_watchlist = self.entry.data.get(CONF_SHOW_WATCHLIST, True)
 
-            # 1. GATHER RAW DATA & IDENTIFY YAHOO TICKERS
+            # 1. GATHER RAW DATA
             for account in accounts_list:
                 if account.get("isExcluded"):
                     continue
@@ -252,80 +451,21 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 if show_holdings:
                     try:
                         holdings_data = await self.api.get_holdings(account_id=account_id)
-                        raw_holdings = holdings_data.get("holdings", [])
-                        raw_account_holdings[account_id] = raw_holdings
-                        
-                        for h in raw_holdings:
-                            if float(h.get("quantity") or 0) > 0 and h.get("symbol") and h.get("dataSource") == "YAHOO":
-                                all_yahoo_tickers.add(h.get("symbol"))
+                        raw_account_holdings[account_id] = holdings_data.get("holdings", [])
                     except Exception:
                         pass
 
             if show_watchlist:
                 try:
                     wl_response = await self.api.get_watchlist()
-                    raw_items = []
                     if isinstance(wl_response, list):
-                        raw_items = wl_response
+                        raw_watchlist_items = wl_response
                     elif isinstance(wl_response, dict):
-                        raw_items = wl_response.get("watchlist", []) or wl_response.get("items", [])
-                    
-                    raw_watchlist_items = raw_items
-                    for item in raw_items:
-                        if item.get("symbol") and item.get("dataSource") == "YAHOO":
-                            all_yahoo_tickers.add(item.get("symbol"))
+                        raw_watchlist_items = wl_response.get("watchlist", []) or wl_response.get("items", [])
                 except Exception:
                     pass
 
-            # 2. DAILY YAHOO PREVIOUS CLOSE FETCH (Once per 24h)
-            now = dt_util.utcnow()
-            if self.last_previous_close_update is None or now.date() > self.last_previous_close_update.date():
-                if all_yahoo_tickers:
-                    _LOGGER.debug("Starting daily Previous Close data fetch via Yahoo")
-                    try:
-                        session = self.api._get_session()
-                        crumb = await self._get_yahoo_crumb(session)
-                        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-                        
-                        for ticker in all_yahoo_tickers:
-                            url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=price"
-                            if crumb:
-                                url += f"&crumb={crumb}"
-                            
-                            try:
-                                async with session.get(url, headers=headers) as response:
-                                    if response.status == 200:
-                                        resp_json = await response.json()
-                                        res = resp_json.get("quoteSummary", {}).get("result", [])
-                                        if res:
-                                            price_data = res[0].get("price", {})
-                                            prev_close = price_data.get("regularMarketPreviousClose", {}).get("raw")
-                                            if prev_close is not None:
-                                                self.previous_close_cache[ticker] = prev_close
-                            except Exception as inner_e:
-                                _LOGGER.debug(f"Failed to fetch Yahoo prev close for {ticker}: {inner_e}")
-                            
-                            await asyncio.sleep(0.5)
-                        
-                        self.last_previous_close_update = now
-                        await self._save_cache()
-                    except Exception as e:
-                        _LOGGER.error(f"Failed Previous Close fetch process: {e}")
-
-            # 3. ENRICH HOLDINGS & WATCHLIST WITH LOCAL MATH
-            holdings_by_account = {}
-            for account_id, raw_holdings in raw_account_holdings.items():
-                enriched_holdings = []
-                for h in raw_holdings:
-                    if float(h.get("quantity") or 0) > 0:
-                        enriched_holdings.append(await self._enrich_item_with_market_data(h))
-                holdings_by_account[account_id] = enriched_holdings
-
-            watchlist_items = []
-            for w in raw_watchlist_items:
-                watchlist_items.append(await self._enrich_item_with_market_data(w))
-
-            # 4. PROVIDER HEALTH
+            # 2. PROVIDER HEALTH
             provider_results = {}
             async def _fetch_health(code):
                 return await self.api.get_provider_health(code)
@@ -334,7 +474,8 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for res in health_results:
                 provider_results[res["code"]] = res
 
-            # 5. DIVIDENDS ENRICHMENT
+            # 3. DIVIDENDS ENRICHMENT (Local Ghostfolio API)
+            now = dt_util.utcnow()
             if self.last_dividends_update is None or not self.dividends_cache or now.date() > self.last_dividends_update.date():
                 _LOGGER.debug("Fetching Activities data for Dividends")
                 try:
@@ -357,19 +498,13 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                                 sym = act["SymbolProfile"].get("symbol")
                             
                             if acc_id and sym:
-                                sym = sym.upper()
-                                
+                                sym = sym.upper() 
                                 amount = float(act.get("valueInBaseCurrency") or 0)
-                                if amount == 0:
-                                    amount = float(act.get("value") or 0)
-                                if amount == 0:
-                                    qty = float(act.get("quantity") or 0)
-                                    price = float(act.get("unitPrice") or 0)
-                                    amount = qty * price
+                                if amount == 0: amount = float(act.get("value") or 0)
+                                if amount == 0: amount = float(act.get("quantity") or 0) * float(act.get("unitPrice") or 0)
                                 
                                 if acc_id not in dividend_data:
                                     dividend_data[acc_id] = {}
-                                
                                 dividend_data[acc_id][sym] = dividend_data[acc_id].get(sym, 0.0) + amount
                     
                     self.dividends_cache = dividend_data
@@ -379,37 +514,18 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
 
             data["dividends"] = self.dividends_cache
 
-            # 6. YAHOO FUNDAMENTALS ENRICHMENT
-            if self.entry.data.get(CONF_SHOW_FUNDAMENTALS, False):
-                if self.last_fundamentals_update is None or now.date() > self.last_fundamentals_update.date():
-                    _LOGGER.debug("Starting daily Fundamentals data fetch via Yahoo")
-                    if all_yahoo_tickers:
-                        try:
-                            session = self.api._get_session()
-                            crumb = await self._get_yahoo_crumb(session)
-                            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-                            
-                            for ticker in all_yahoo_tickers:
-                                url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=defaultKeyStatistics,financialData,summaryDetail,earningsTrend"
-                                if crumb:
-                                    url += f"&crumb={crumb}"
-                                
-                                try:
-                                    async with session.get(url, headers=headers) as response:
-                                        if response.status == 200:
-                                            resp_json = await response.json()
-                                            res = resp_json.get("quoteSummary", {}).get("result", [])
-                                            if res:
-                                                self.fundamentals_cache[ticker] = res[0]
-                                except Exception as inner_e:
-                                    _LOGGER.debug(f"Failed to fetch Yahoo fundamentals for {ticker}: {inner_e}")
-                                
-                                await asyncio.sleep(0.5)
-                            
-                            self.last_fundamentals_update = now
-                            await self._save_cache()
-                        except Exception as e:
-                            _LOGGER.error(f"Failed Fundamentals enrichment process: {e}")
+            # 4. ENRICH HOLDINGS & WATCHLIST WITH LIVE & CACHED DATA
+            holdings_by_account = {}
+            for account_id, raw_holdings in raw_account_holdings.items():
+                enriched_holdings = []
+                for h in raw_holdings:
+                    if float(h.get("quantity") or 0) > 0:
+                        enriched_holdings.append(await self._enrich_item_with_market_data(h))
+                holdings_by_account[account_id] = enriched_holdings
+
+            watchlist_items = []
+            for w in raw_watchlist_items:
+                watchlist_items.append(await self._enrich_item_with_market_data(w))
 
             data["server_online"] = True
             data["accounts"] = accounts_data
@@ -455,3 +571,50 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
 
         show_accounts = self.entry.data.get(CONF_SHOW_ACCOUNTS, True)
         accounts_list = self.data.get("accounts", {}).get("accounts", [])
+        
+        for account in accounts_list:
+            if account.get("isExcluded"):
+                continue
+            account_id = account["id"]
+            if show_accounts:
+                valid_unique_ids.add(f"ghostfolio_account_value_{account_id}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_account_net_worth_{account_id}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_account_cost_{account_id}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_account_perf_{account_id}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_account_perf_pct_{account_id}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_account_simple_gain_{account_id}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_account_dividends_{account_id}_{entry_id}")
+
+        if self.entry.data.get(CONF_SHOW_HOLDINGS, True):
+            all_holdings = self.data.get("account_holdings", {})
+            for account in accounts_list:
+                if account.get("isExcluded"):
+                    continue
+                account_id = account["id"]
+                holdings = all_holdings.get(account_id, [])
+                for h in holdings:
+                    if float(h.get("quantity") or 0) > 0:
+                        symbol = h.get("symbol")
+                        safe_symbol = slugify(symbol)
+                        valid_unique_ids.add(f"ghostfolio_holding_{account_id}_{safe_symbol}_{entry_id}")
+                        valid_unique_ids.add(f"ghostfolio_limit_low_{account_id}_{safe_symbol}_{entry_id}")
+                        valid_unique_ids.add(f"ghostfolio_limit_high_{account_id}_{safe_symbol}_{entry_id}")
+
+        if self.entry.data.get(CONF_SHOW_WATCHLIST, True):
+            watchlist = self.data.get("watchlist", [])
+            for item in watchlist:
+                symbol = item.get("symbol")
+                safe_symbol = slugify(symbol)
+                valid_unique_ids.add(f"ghostfolio_watchlist_{safe_symbol}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_watchlist_limit_low_{safe_symbol}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_watchlist_limit_high_{safe_symbol}_{entry_id}")
+
+        if self.entry.data.get(CONF_SHOW_FUNDAMENTALS, False):
+            fund_payload = self.data.get("fundamentals_data", {})
+            for symbol in fund_payload.keys():
+                safe_symbol = slugify(symbol)
+                valid_unique_ids.add(f"ghostfolio_fundamentals_{safe_symbol}_{entry_id}")
+
+        for entity_entry in entries:
+            if entity_entry.unique_id not in valid_unique_ids:
+                entity_registry.async_remove(entity_entry.entity_id)
