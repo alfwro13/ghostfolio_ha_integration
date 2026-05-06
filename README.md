@@ -121,6 +121,36 @@ To help you troubleshoot issues and maintain your setup, the integration provide
 - **Data Provider Status**: Individual sensors for each data provider (e.g., `Yahoo Status`, `Coingecko Status`) showing if they are `Available` or `Unavailable`.
 - **Prune Orphaned Entities**: A button that, when pressed, scans your Home Assistant registry and removes any Ghostfolio entities (such as sold assets or removed watchlist items) that are no longer returned by the API.
 
+### 8. Manual Services & Pre-Market Data
+
+This integration exposes specific services to Home Assistant, allowing you to manually trigger data refreshes or fetch extended-hours market data.
+
+* **`ghostfolio.fetch_premarket_data`**: Pulls live Pre-Market and Post-Market prices for US stocks (Yahoo Finance). It safely calculates the exact holding value in your base currency without breaking regular Ghostfolio updates.
+* **`ghostfolio.fetch_24h_change`**: Pulls the official Previous Close to accurately calculate the 24-hour change percentage, bypassing timezone delays.
+* **`ghostfolio.refresh_fundamentals`**: Forces an immediate refresh of deep fundamental metrics (PEG, Margins, etc.).
+
+**Example Automation (Pre-Market Fetch):**
+To track prices before the market opens, create an automation that runs the pre-market service every few minutes during extended trading hours.
+
+```yaml
+alias: "Ghostfolio - Fetch Pre-Market Data"
+trigger:
+  - platform: time_pattern
+    minutes: "/5"
+condition:
+  - condition: time
+    after: "04:00:00"
+    before: "09:30:00"
+    weekday:
+      - mon
+      - tue
+      - wed
+      - thu
+      - fri
+action:
+  - service: ghostfolio.fetch_premarket_data
+```
+
 ## Installation
 
 ### HACS (Recommended)
