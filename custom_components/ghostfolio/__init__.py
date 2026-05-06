@@ -279,7 +279,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
 
             # 2. DAILY YAHOO PREVIOUS CLOSE FETCH (Once per 24h)
             now = dt_util.utcnow()
-            if self.last_previous_close_update is None or (now - self.last_previous_close_update) > timedelta(hours=24):
+            if self.last_previous_close_update is None or now.date() > self.last_previous_close_update.date():
                 if all_yahoo_tickers:
                     _LOGGER.debug("Starting daily Previous Close data fetch via Yahoo")
                     try:
@@ -335,7 +335,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 provider_results[res["code"]] = res
 
             # 5. DIVIDENDS ENRICHMENT
-            if self.last_dividends_update is None or not self.dividends_cache or (now - self.last_dividends_update) > timedelta(hours=24):
+            if self.last_dividends_update is None or not self.dividends_cache or now.date() > self.last_dividends_update.date():
                 _LOGGER.debug("Fetching Activities data for Dividends")
                 try:
                     activities_resp = await self.api.get_activities()
@@ -381,7 +381,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
 
             # 6. YAHOO FUNDAMENTALS ENRICHMENT
             if self.entry.data.get(CONF_SHOW_FUNDAMENTALS, False):
-                if self.last_fundamentals_update is None or (now - self.last_fundamentals_update) > timedelta(hours=24):
+                if self.last_fundamentals_update is None or now.date() > self.last_fundamentals_update.date():
                     _LOGGER.debug("Starting daily Fundamentals data fetch via Yahoo")
                     if all_yahoo_tickers:
                         try:
