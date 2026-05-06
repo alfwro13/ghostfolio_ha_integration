@@ -300,10 +300,11 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 if not real_time_price and history:
                     real_time_price = float(history[-1].get("marketPrice") or 0)
 
-                # --- 1. PRE-MARKET OVERRIDE ---
-                # Check ephemeral cache populated by the fetch_premarket service
+                # --- 1. EXTRACT PRE-MARKET OVERRIDE ---
+                # Pull from the ephemeral cache populated by the fetch_premarket service
+                premarket_price = None
                 if data_source == "YAHOO" and symbol in self.premarket_cache:
-                    real_time_price = self.premarket_cache[symbol]
+                    premarket_price = self.premarket_cache[symbol]
                     
                 change_pct = None
                 prev_price = 0
@@ -315,7 +316,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                         change_pct = ((real_time_price - prev_price) / prev_price) * 100
 
                 # --- 3. FALLBACK METHOD: GHOSTFOLIO HISTORY ---
-                # Always safely triggers if the service has never been run or it's a crypto coin
                 if change_pct is None and history:
                     today_str = dt_util.utcnow().date().isoformat()
                     latest_hist_date = history[-1].get("date", "")[:10]
@@ -333,23 +333,16 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                     if prev_price > 0 and real_time_price > 0:
                         change_pct = ((real_time_price - prev_price) / prev_price) * 100
 
-                # --- 4. APPLY DATA ---
+                # --- 4. APPLY STANDARD DATA ---
                 if change_pct is not None:
                     item["marketChangePercentage"] = change_pct
-                    # Because prev_price and real_time_price are mathematically uniform, 
-                    # we can simply subtract to get exact pence/pounds change without messy conversions.
                     item["marketChange"] = real_time_price - prev_price
 
                 # ==========================================
                 # BULLETPROOF PRE-MARKET OVERRIDE
                 # ==========================================
                 
-                # TODO: Inject your premarket fetching logic here.
-                # If your service is not running, or returns None, the safeguard below
-                # prevents any modifications and Ghostfolio's native data passes through.
-                premarket_price = None  
-                
-                # SAFEGUARD: Override only runs if pre-market price is fetched, valid, and different
+                # SAFEGUARD: Override ONLY runs if pre-market price is explicitly loaded, valid, and different
                 if premarket_price is not None and float(premarket_price) > 0 and float(premarket_price) != real_time_price:
                     premarket_price = float(premarket_price)
                     quantity = float(item.get("quantity") or 0)
@@ -536,6 +529,11 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             data["providers"] = provider_results
             data["fundamentals_data"] = self.fundamentals_cache
             
+            # 5. CLEAR EPHEMERAL PRE-MARKET CACHE
+            # This ensures that if the manual pre-market service stops running (e.g. market opens),
+            # the stale pre-market data is wiped and natively tracked Ghostfolio prices take over.
+            self.premarket_cache.clear()
+
             return data
 
         except Exception as err:
