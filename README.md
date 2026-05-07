@@ -91,26 +91,8 @@ This integration features a built-in event system to handle price alerts efficie
 
 **Event Name:** `ghostfolio_limit_alert`
 
-**Example Automation:**
-This single automation will notify you about **ANY** asset (Holding or Watchlist) that crosses a High or Low limit.
+[**Limit Notification Example Automation**](assets/automation_limit_notification.md)
 
-```yaml
-alias: "Ghostfolio - Limit Notification"
-description: "Sends a notification when any Ghostfolio asset crosses a limit."
-trigger:
-  - platform: event
-    event_type: ghostfolio_limit_alert
-action:
-  - service: notify.mobile_app
-    data:
-      title: "Price Alert: {{ trigger.event.data.ticker }}"
-      message: >-
-        {{ trigger.event.data.ticker }} has hit the {{ trigger.event.data.limit_type }} limit of 
-        {{ trigger.event.data.limit_value }} {{ trigger.event.data.currency }}.
-        
-        Current Price: {{ "%.2f" | format(trigger.event.data.current_value) }} {{ trigger.event.data.currency }}
-mode: parallel
-```
 **Event Data Payload**: The event provides the following data variables you can use in your templates:
 - ticker: The symbol (e.g., "AAPL")
 - account: The account name or "Watchlist"
@@ -134,27 +116,7 @@ This integration exposes specific services to Home Assistant, allowing you to ma
 * **`ghostfolio.fetch_24h_change`**: Pulls the official Previous Close to accurately calculate the 24-hour change percentage, bypassing timezone delays.
 * **`ghostfolio.refresh_fundamentals`**: Forces an immediate refresh of deep fundamental metrics (PEG, Margins, etc.).
 
-**Example Automation (Pre-Market Fetch):**
-To track prices before the market opens, create an automation that runs the pre-market service every few minutes during extended trading hours.
-
-```yaml
-alias: "Ghostfolio - Fetch Pre-Market Data"
-trigger:
-  - platform: time_pattern
-    minutes: "/5"
-condition:
-  - condition: time
-    after: "04:00:00"
-    before: "09:30:00"
-    weekday:
-      - mon
-      - tue
-      - wed
-      - thu
-      - fri
-action:
-  - service: ghostfolio.fetch_premarket_data
-```
+[**Example Automation (Pre-Market Fetch)**](assets/automation_pre_market_fetch.md)
 
 ## Installation
 
