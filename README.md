@@ -15,6 +15,8 @@ This integration automatically detects your portfolio's base currency and offers
 - **Global Totals:** Track overall portfolio value and performance.
 - **Account Breakdowns:** Individual sensors for each investment account.
 - **Asset Tracking:** Dedicated sensors for every holding and watchlist item.
+- **Dividend Tracking:** Monitor total accumulated dividends at the global, account, and individual holding levels.
+- **Fundamental Metrics:** Deep integration with Yahoo Finance to pull fundamental metrics (PEG, Margins, Valuation) for your assets.
 - **Price Alerts:** Configurable High/Low limit numbers for every asset to trigger automations.
 - **Diagnostic Sensors:** Monitor the connection status of your Ghostfolio server and its data providers.
 - **Smart Health Checks:** Automatically detects if a data provider (e.g., Yahoo Finance) is down and marks affected sensors as `Unknown` instead of reporting erroneous zero values.
@@ -28,6 +30,7 @@ This integration automatically detects your portfolio's base currency and offers
 - **Simple Gain %**: The simple percentage return, calculated as `(Value - Cost) / Cost`.
 - **Time-Weighted Return %**: The Time-Weighted Rate of Return (TWR) of your portfolio (measures strategy performance, ignoring deposits/withdrawals).
 - **Time-Weighted Return FX %**: The TWR percentage including currency effects.
+- **Portfolio Total Dividend**: The total accumulated dividend payments across all accounts.
 
 *Note: If any active holding in your portfolio relies on a data provider that is currently down, these global summary sensors will report `Unknown` to prevent misleading data.*
 
@@ -38,14 +41,7 @@ Sensors are created for each of your Ghostfolio accounts (excluding hidden ones)
 - **[Account Name] Gain**: Absolute gain/loss for the specific account.
 - **[Account Name] Simple Gain %**: Simple percentage gain/loss for the specific account.
 - **[Account Name] Time-Weighted Return %**: Time-Weighted Return percentage for the specific account.
-
-### 2. Per-Account Sensors
-Sensors are created for each of your Ghostfolio accounts (excluding hidden ones):
-- **[Account Name] Value**: Current market value of the specific account.
-- **[Account Name] Cost**: Total investment in the specific account.
-- **[Account Name] Gain**: Absolute gain/loss for the specific account.
-- **[Account Name] Simple Gain %**: Simple percentage gain/loss for the specific account.
-- **[Account Name] Time-Weighted Return %**: Time-Weighted Return percentage for the specific account.
+- **[Account Name] Total Dividends**: Total accumulated dividends for the specific account.
 
 ### 3. Per-Holding Sensors (Assets)
 Track every individual asset in your portfolio with a dedicated sensor:
@@ -54,6 +50,7 @@ Track every individual asset in your portfolio with a dedicated sensor:
 - **Attributes**: 
   - `market_price`, `average_buy_price`, `number_of_shares`
   - `gain_value`, `gain_pct`, `trend_vs_buy`
+  - `accumulated_dividends`, `accumulated_dividends_currency`
   - `low_limit_set`, `low_limit_reached`
   - `high_limit_set`, `high_limit_reached`
 
@@ -70,7 +67,15 @@ Track items from your Ghostfolio Watchlist even if you don't own them yet.
   - `high_limit_set`, `high_limit_reached`
 *(Requires "Show Watchlist Items" to be enabled in configuration)*
 
-### 5. Price Limit Configuration (Inputs)
+### 5. Fundamentals Sensors
+Track detailed fundamental metrics for your holdings and watchlist items via Yahoo Finance. *(Requires "Show Fundamentals" to be enabled in configuration)*
+- **Sensor State**: The ticker symbol.
+- **Attributes**:
+  - `valuation` (e.g., undervalued, overpriced, fairly_valued), `lynch_peg_ratio`
+  - `standard_peg_ratio`, `forward_pe`, `dividend_yield`, `projected_1y_growth`
+  - Additional underlying metrics derived from Yahoo Finance's Financial Data and Key Statistics modules.
+
+### 6. Price Limit Configuration (Inputs)
 For every Holding and Watchlist item, the integration creates two **Number** entities that allow you to set price targets directly from Home Assistant.
 
 - **[Ticker] - Low Limit**
@@ -81,7 +86,7 @@ When you set a value in these number entities, the corresponding main Sensor (Ho
 - **`low_limit_reached`**: Becomes `true` if the value drops to or below your limit.
 - **`high_limit_reached`**: Becomes `true` if the value rises to or above your limit.
 
-### 6. Automations & Alerts (Recommended)
+### 7. Automations & Alerts (Recommended)
 This integration features a built-in event system to handle price alerts efficiently. Instead of creating complex automations that watch every single sensor state, the integration fires a **single event** whenever a limit is crossed.
 
 **Event Name:** `ghostfolio_limit_alert`
@@ -198,6 +203,7 @@ This integration uses the following Ghostfolio API endpoints:
 - `GET /api/v2/portfolio/performance`: For retrieving global and per-account performance data.
 - `GET /api/v1/portfolio/holdings`: For retrieving individual asset details.
 - `GET /api/v1/watchlist`: For retrieving watchlist items.
+- `GET /api/v1/activities`: For calculating dividends and transactions.
 - `GET /api/v1/market-data`: For fetching real-time price and history for watchlist items.
 - `GET /api/v1/health/data-provider/{provider}`: For checking the status of data providers.
 
