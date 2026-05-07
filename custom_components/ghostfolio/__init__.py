@@ -113,6 +113,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         self.last_previous_close_update = None
 
         self.premarket_cache = {}
+        self.us_market_open: bool | None = None
 
         self.dividends_cache = {}
         self.last_dividends_update = None
@@ -176,9 +177,43 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                     
         return list(tickers)
 
+    async def _async_check_us_market_state(self, session, crumb) -> bool | None:
+        """Check if US market is open using SPY as a universal proxy."""
+        url = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=SPY"
+        if crumb:
+            url += f"&crumb={crumb}"
+            
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        try:
+            async with session.get(url, headers=headers) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    res = data.get("quoteResponse", {}).get("result", [])
+                    if res:
+                        state = res[0].get("marketState", "")
+                        return state == "REGULAR"
+        except Exception as e:
+            _LOGGER.debug(f"Failed to check US market state: {e}")
+        return None
+
     async def async_fetch_premarket(self):
         """Manually fetch Pre-market data for US stocks using bulk API."""
         _LOGGER.info("Manually fetching Pre-Market data from Yahoo")
+        session = self.api._get_session()
+        crumb = await self._get_yahoo_crumb(session)
+        
+        # 1. Update the Market State Sensor
+        is_open = await self._async_check_us_market_state(session, crumb)
+        if is_open is not None:
+            self.us_market_open = is_open
+            
+        # 2. Smart Purge: If the market is open, wipe cache and abort fetch
+        if self.us_market_open:
+            _LOGGER.debug("US Market is open. Skipping pre-market fetch and clearing cache.")
+            self.premarket_cache.clear()
+            return
+            
+        # 3. If market closed, proceed with fetch
         tickers = self._get_active_yahoo_symbols(us_only=True)
         if not tickers:
             return
@@ -187,8 +222,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol_string}"
         
         try:
-            session = self.api._get_session()
-            crumb = await self._get_yahoo_crumb(session)
             if crumb:
                 url += f"&crumb={crumb}"
                 
@@ -206,8 +239,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                             price = res.get("preMarketPrice")
                         elif "POST" in state or state == "CLOSED":
                             price = res.get("postMarketPrice") or res.get("regularMarketPrice")
-                        elif state == "REGULAR":
-                            price = res.get("regularMarketPrice")
                             
                         if price is not None and sym:
                             self.premarket_cache[sym] = float(price)
@@ -301,7 +332,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                     real_time_price = float(history[-1].get("marketPrice") or 0)
 
                 # --- 1. EXTRACT PRE-MARKET OVERRIDE ---
-                # Pull from the ephemeral cache populated by the fetch_premarket service
+                # Check ephemeral cache. No timers needed, cache is managed by market state.
                 premarket_price = None
                 if data_source == "YAHOO" and symbol in self.premarket_cache:
                     premarket_price = self.premarket_cache[symbol]
@@ -338,10 +369,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                     item["marketChangePercentage"] = change_pct
                     item["marketChange"] = real_time_price - prev_price
 
-                # ==========================================
-                # BULLETPROOF PRE-MARKET OVERRIDE
-                # ==========================================
-                
+              
                 # SAFEGUARD: Override ONLY runs if pre-market price is explicitly loaded, valid, and different
                 if premarket_price is not None and float(premarket_price) > 0 and float(premarket_price) != real_time_price:
                     premarket_price = float(premarket_price)
@@ -404,6 +432,20 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 if p_up: self.last_previous_close_update = dt_util.parse_datetime(p_up)
 
             self._cache_loaded = True
+
+        # --- UPDATE US MARKET STATE SENSOR ---
+        try:
+            session = self.api._get_session()
+            crumb = await self._get_yahoo_crumb(session)
+            is_open = await self._async_check_us_market_state(session, crumb)
+            if is_open is not None:
+                self.us_market_open = is_open
+        except Exception:
+            pass
+
+        # Smart Purge: Guarantee the cache is empty if the market is open
+        if self.us_market_open:
+            self.premarket_cache.clear()
 
         data = {
             "server_online": False,
@@ -528,11 +570,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             data["watchlist"] = watchlist_items
             data["providers"] = provider_results
             data["fundamentals_data"] = self.fundamentals_cache
-            
-            # 5. CLEAR EPHEMERAL PRE-MARKET CACHE
-            # This ensures that if the manual pre-market service stops running (e.g. market opens),
-            # the stale pre-market data is wiped and natively tracked Ghostfolio prices take over.
-            self.premarket_cache.clear()
 
             return data
 
@@ -562,6 +599,8 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             valid_unique_ids.add(f"ghostfolio_portfolio_dividends_{entry_id}")
 
         valid_unique_ids.add(f"ghostfolio_server_status_{entry_id}")
+        valid_unique_ids.add(f"ghostfolio_us_market_{entry_id}")
+        
         for provider in DATA_PROVIDERS:
             valid_unique_ids.add(f"ghostfolio_provider_{provider.lower()}_{entry_id}")
 
