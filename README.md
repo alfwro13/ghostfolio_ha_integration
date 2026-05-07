@@ -149,12 +149,6 @@ This integration exposes specific services to Home Assistant, allowing you to ma
    - **Show Holdings**: (Optional) Check to create sensors and limit numbers for individual assets.
    - **Show Watchlist Items**: (Optional) Check to create sensors and limit numbers for watchlist items.
 
-### Getting Your Access Token
-
-1. Log in to your Ghostfolio instance.
-2. Go to **Settings > Security**.
-3. Scroll to **Security Token**.
-4. Generate or copy your access token (Anonymous Access).
 
 ## API Endpoints Used
 
