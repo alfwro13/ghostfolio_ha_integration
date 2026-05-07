@@ -27,11 +27,15 @@ async def async_setup_entry(
     # 1. Server Connectivity Sensor
     entities.append(GhostfolioServerSensor(coordinator, entry))
 
-    # 2. Data Provider Sensors
+    # 2. US Market Status Sensor
+    entities.append(GhostfolioUSMarketSensor(coordinator, entry))
+
+    # 3. Data Provider Sensors
     for provider in DATA_PROVIDERS:
         entities.append(GhostfolioProviderSensor(coordinator, entry, provider))
         
     async_add_entities(entities)
+
 
 class GhostfolioServerSensor(CoordinatorEntity, BinarySensorEntity):
     """Sensor to check if Ghostfolio Server is reachable."""
@@ -60,6 +64,33 @@ class GhostfolioServerSensor(CoordinatorEntity, BinarySensorEntity):
         if not self.coordinator.data:
             return False
         return self.coordinator.data.get("server_online", False)
+
+
+class GhostfolioUSMarketSensor(CoordinatorEntity, BinarySensorEntity):
+    """Sensor to track if the US Market is currently open."""
+
+    _attr_has_entity_name = True
+    _attr_name = "US Market"
+    _attr_icon = "mdi:store"
+    _attr_device_class = BinarySensorDeviceClass.WINDOW # 'on' = Open, 'off' = Closed
+
+    def __init__(self, coordinator: GhostfolioDataUpdateCoordinator, config_entry: ConfigEntry):
+        """Initialize the market sensor."""
+        super().__init__(coordinator)
+        self.portfolio_name = config_entry.data.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
+        self._attr_unique_id = f"ghostfolio_us_market_{config_entry.entry_id}"
+        
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, f"ghostfolio_portfolio_{config_entry.entry_id}")},
+            "name": f"{self.portfolio_name} Portfolio",
+            "manufacturer": "Ghostfolio",
+            "model": "Portfolio Tracker",
+        }
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True if US Market is Open."""
+        return self.coordinator.us_market_open
 
 
 class GhostfolioProviderSensor(CoordinatorEntity, BinarySensorEntity):
