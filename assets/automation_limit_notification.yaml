@@ -1,3 +1,6 @@
+This single automation will notify you about **ANY** asset (Holding or Watchlist) that crosses a High or Low limit.
+
+```yaml
 alias: "Ghostfolio - Limit Notification"
 description: "Sends a notification when any Ghostfolio asset crosses a limit."
 trigger:
@@ -13,3 +16,4 @@ action:
         
         Current Price: {{ "%.2f" | format(trigger.event.data.current_value) }} {{ trigger.event.data.currency }}
 mode: parallel
+```
