@@ -140,4 +140,10 @@ Once the above is done you should see this in your helpers:
 
 ## Phase 2: Lovelace Dashboard Configuration
 
-This is the complete YAML for the UI as copied from the Home Assistant Raw Configuration Editor
+This is the complete YAML for the UI 
+Watchlist Dashboard - it is a single card panel (so it displays on the whole page)
+
+as copied from the Home Assistant Raw Configuration Editor:
+
+[Watchlist Details Dashboard](assets/watchlist_details.yaml)
+
