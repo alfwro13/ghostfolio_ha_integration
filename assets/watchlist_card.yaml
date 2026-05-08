@@ -1,0 +1,406 @@
+type: custom:flex-table-card
+title: Watchlist Limits
+clickable: true
+enable_search: true
+entities:
+  include: sensor.watchlist_*
+  exclude:
+    - number.watchlist_*
+    - select.watchlist_ticker_selector
+    - sensor.watchlist_selected_asset_type
+    - sensor.watchlist_selected_fundamental_data
+sort_by: ticker+
+columns:
+  - name: Holding
+    data: friendly_name
+    modify: "x ? String(x).replace('Watchlist ', '').trim() : '-'"
+  - name: Ticker
+    data: ticker
+    align: left
+    modify: |-
+      (() => {
+        if (!x) return '-';
+        var t = String(x).trim();
+        
+        // 1. Stop the standard row more-info dialog from opening
+        var js = "event.stopPropagation(); ";
+        
+        // 2. Connect to Home Assistant's backend
+        js += "var ha = document.querySelector('home-assistant'); ";
+        js += "if(ha && ha.hass) { ";
+        
+        // 3. Update the input_text with the clicked ticker
+        js += "ha.hass.callService('input_text', 'set_value', { entity_id: 'input_text.watchlist_selected_ticker', value: '" + t + "' }); ";
+        
+        // 4. Force the browser to navigate to your subview
+        js += "history.pushState(null, '', '/dashboard-money/watchlist-details'); ";
+        js += "window.dispatchEvent(new CustomEvent('location-changed')); ";
+        js += "}";
+        
+        // Wrap the ticker in a clickable div styled to look like a link
+        return '<div style="cursor: pointer; color: var(--primary-color); border-bottom: 1px dashed var(--primary-color);" onclick="' + js + '"><b>' + t + '</b></div>';
+      })()
+  - name: Valuation
+    data: entity_id
+    align: center
+    modify: |-
+      (() => {
+        if (!x) return '-';
+        var haNode = document.querySelector('home-assistant');
+        if (!haNode || !haNode.hass) return '-';
+        var stateObj = haNode.hass.states[x];
+        if (!stateObj || !stateObj.attributes || !stateObj.attributes.ticker) return '-';
+        
+        var ticker = String(stateObj.attributes.ticker).toLowerCase().replace(/\./g, '_').replace(/\s/g, '_');
+        var fundObj = haNode.hass.states['sensor.fundamentals_' + ticker + '_fundamentals'];
+        if (!fundObj || !fundObj.attributes || !fundObj.attributes.valuation) return '-';
+        
+        var val = String(fundObj.attributes.valuation);
+        if (val.toLowerCase() === 'unknown' || val.trim() === '') return '-';
+        
+        var color = 'inherit';
+        if (val.includes('under')) color = '#4caf50';
+        else if (val.includes('over')) color = '#f44336';
+        else if (val.includes('fairly')) color = '#ff9800';
+        
+        var formattedVal = val.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        return '<span style="color:' + color + '; font-weight:bold;">' + formattedVal + '</span>';
+      })()
+  - name: 5y PEG
+    data: entity_id
+    align: center
+    modify: |-
+      (() => {
+        if (!x) return '-';
+        var haNode = document.querySelector('home-assistant');
+        if (!haNode || !haNode.hass) return '-';
+        var stateObj = haNode.hass.states[x];
+        if (!stateObj || !stateObj.attributes || !stateObj.attributes.ticker) return '-';
+        
+        var ticker = String(stateObj.attributes.ticker).toLowerCase().replace(/\./g, '_').replace(/\s/g, '_');
+        var fundObj = haNode.hass.states['sensor.fundamentals_' + ticker + '_fundamentals'];
+        if (!fundObj || !fundObj.attributes || fundObj.attributes.pegRatio == null) return '-';
+        
+        var peg = parseFloat(fundObj.attributes.pegRatio);
+        if (isNaN(peg)) return '-';
+        
+        var status = '';
+        var color = 'inherit';
+        
+        if (peg < 1.0) {
+          status = 'Undervalued';
+          color = '#4caf50';
+        } else if (peg <= 1.5) {
+          status = 'Fairly Valued';
+          color = '#ff9800';
+        } else {
+          status = 'Overvalued';
+          color = '#f44336';
+        }
+        
+        return '<span style="color:' + color + '; font-weight:bold;">' + status + ' (' + peg.toFixed(2) + ')</span>';
+      })()
+  - name: Fwd P/E
+    data: entity_id
+    align: right
+    modify: |-
+      (() => {
+        if (!x) return '-';
+        var haNode = document.querySelector('home-assistant');
+        if (!haNode || !haNode.hass) return '-';
+        var stateObj = haNode.hass.states[x];
+        if (!stateObj || !stateObj.attributes || !stateObj.attributes.ticker) return '-';
+        
+        var ticker = String(stateObj.attributes.ticker).toLowerCase().replace(/\./g, '_').replace(/\s/g, '_');
+        var fundObj = haNode.hass.states['sensor.fundamentals_' + ticker + '_fundamentals'];
+        if (!fundObj || !fundObj.attributes || fundObj.attributes.forward_pe == null) return '-';
+        
+        var pe = parseFloat(fundObj.attributes.forward_pe);
+        return isNaN(pe) ? '-' : pe.toFixed(1);
+      })()
+  - name: Rec
+    data: entity_id
+    align: center
+    modify: |-
+      (() => {
+        if (!x) return '-';
+        var haNode = document.querySelector('home-assistant');
+        if (!haNode || !haNode.hass) return '-';
+        var stateObj = haNode.hass.states[x];
+        if (!stateObj || !stateObj.attributes || !stateObj.attributes.ticker) return '-';
+        
+        var ticker = String(stateObj.attributes.ticker).toLowerCase().replace(/\./g, '_').replace(/\s/g, '_');
+        var fundObj = haNode.hass.states['sensor.fundamentals_' + ticker + '_fundamentals'];
+        if (!fundObj || !fundObj.attributes || !fundObj.attributes.recommendationKey) return '-';
+        
+        var rec = String(fundObj.attributes.recommendationKey).toLowerCase();
+        var color = 'inherit';
+        if (rec.includes('buy')) color = '#4caf50';
+        else if (rec.includes('sell')) color = '#f44336';
+        else if (rec.includes('hold')) color = '#ff9800';
+        
+        return '<span style="color:' + color + '; font-weight:bold;">' + rec.toUpperCase().replace(/_/g, ' ') + '</span>';
+      })()
+  - name: Beta
+    data: entity_id
+    align: center
+    modify: |-
+      (() => {
+        if (!x) return '-';
+        var haNode = document.querySelector('home-assistant');
+        if (!haNode || !haNode.hass) return '-';
+        var stateObj = haNode.hass.states[x];
+        if (!stateObj || !stateObj.attributes || !stateObj.attributes.ticker) return '-';
+        
+        var ticker = String(stateObj.attributes.ticker).toLowerCase().replace(/\./g, '_').replace(/\s/g, '_');
+        var fundObj = haNode.hass.states['sensor.fundamentals_' + ticker + '_fundamentals'];
+        if (!fundObj || !fundObj.attributes || fundObj.attributes.beta == null) return '-';
+        
+        var rawBeta = parseFloat(fundObj.attributes.beta);
+        if (isNaN(rawBeta)) return '-';
+        
+        var b = Math.round(rawBeta * 100) / 100;
+        var status = '';
+        var color = 'inherit';
+        
+        if (b > 1) {
+          status = 'Volatile';
+          color = '#ff9800';
+        } else if (b < 1 && b > 0) {
+          status = 'Stable';
+          color = '#4caf50';
+        } else if (b < 0) {
+          status = 'Inverse';
+          color = '#2196f3';
+        } else if (b === 0) {
+          status = 'Uncorrelated';
+        } else if (b === 1) {
+          status = 'Average';
+        }
+        
+        return '<span style="color:' + color + '; font-weight:bold;">' + status + ' (' + rawBeta.toFixed(2) + ')</span>';
+      })()
+  - name: Div %
+    data: entity_id
+    align: right
+    modify: |-
+      (() => {
+        if (!x) return '-';
+        var haNode = document.querySelector('home-assistant');
+        if (!haNode || !haNode.hass) return '-';
+        var stateObj = haNode.hass.states[x];
+        if (!stateObj || !stateObj.attributes || !stateObj.attributes.ticker) return '-';
+        
+        var ticker = String(stateObj.attributes.ticker).toLowerCase().replace(/\./g, '_').replace(/\s/g, '_');
+        var fundObj = haNode.hass.states['sensor.fundamentals_' + ticker + '_fundamentals'];
+        if (!fundObj || !fundObj.attributes || fundObj.attributes.dividend_yield == null) return '-';
+        
+        var div = parseFloat(fundObj.attributes.dividend_yield);
+        if (isNaN(div) || div === 0) return '-';
+        return (div * 100).toFixed(2) + '%';
+      })()
+  - name: 24h %
+    data: market_change_pct_24h
+    align: right
+    modify: |-
+      (() => {
+        var val = parseFloat(x);
+        if (isNaN(val)) return '-';
+        var color = val > 0 ? '#4caf50' : val < 0 ? '#f44336' : 'inherit';
+        var sign = val > 0 ? '+' : '';
+        return '<span style="color:' + color + '; font-weight:bold;">' + sign + val.toFixed(2) + '%</span>';
+      })()
+  - name: 50d
+    data: trend_50d
+    align: center
+    modify: |-
+      (() => {
+        if (!x) return '';
+        var t = String(x).toUpperCase().trim();
+        if (t === 'UNKNOWN' || t === 'UNAVAILABLE' || t === 'UNDEFINED' || t === '') return '';
+        var color = t === 'UP' ? '#4caf50' : (t === 'DOWN' ? '#f44336' : 'inherit');
+        return '<span style="color:' + color + '; font-weight:bold;">' + t + '</span>';
+      })()
+  - name: 52w
+    data: entity_id
+    align: right
+    modify: |-
+      (() => {
+        if (!x) return '-';
+        var haNode = document.querySelector('home-assistant');
+        if (!haNode || !haNode.hass) return '-';
+        var stateObj = haNode.hass.states[x];
+        if (!stateObj || !stateObj.attributes || !stateObj.attributes.ticker) return '-';
+        
+        var ticker = String(stateObj.attributes.ticker).toLowerCase().replace(/\./g, '_').replace(/\s/g, '_');
+        var fundObj = haNode.hass.states['sensor.fundamentals_' + ticker + '_fundamentals'];
+        if (!fundObj || !fundObj.attributes || fundObj.attributes['52WeekChange'] == null) return '-';
+        
+        var change = parseFloat(fundObj.attributes['52WeekChange']);
+        if (isNaN(change)) return '-';
+        
+        var color = change > 0 ? '#4caf50' : change < 0 ? '#f44336' : 'inherit';
+        var sign = change > 0 ? '+' : '';
+        return '<span style="color:' + color + '; font-weight:bold;">' + sign + (change * 100).toFixed(2) + '%</span>';
+      })()
+  - name: Pr.1y Growth
+    data: entity_id
+    align: right
+    modify: |-
+      (() => {
+        if (!x) return '-';
+        var haNode = document.querySelector('home-assistant');
+        if (!haNode || !haNode.hass) return '-';
+        var stateObj = haNode.hass.states[x];
+        if (!stateObj || !stateObj.attributes || !stateObj.attributes.ticker) return '-';
+        
+        var ticker = String(stateObj.attributes.ticker).toLowerCase().replace(/\./g, '_').replace(/\s/g, '_');
+        var fundObj = haNode.hass.states['sensor.fundamentals_' + ticker + '_fundamentals'];
+        if (!fundObj || !fundObj.attributes || fundObj.attributes.projected_1y_growth == null) return '-';
+        
+        var growth = parseFloat(fundObj.attributes.projected_1y_growth);
+        if (isNaN(growth)) return '-';
+        
+        var color = growth > 0 ? '#4caf50' : (growth < 0 ? '#f44336' : 'inherit');
+        var sign = growth > 0 ? '+' : '';
+        return '<span style="color:' + color + '; font-weight:bold;">' + sign + (growth * 100).toFixed(2) + '%</span>';
+      })()
+  - name: Rev Growth
+    data: entity_id
+    align: right
+    modify: |-
+      (() => {
+        if (!x) return '-';
+        var haNode = document.querySelector('home-assistant');
+        if (!haNode || !haNode.hass) return '-';
+        var stateObj = haNode.hass.states[x];
+        if (!stateObj || !stateObj.attributes || !stateObj.attributes.ticker) return '-';
+        
+        var ticker = String(stateObj.attributes.ticker).toLowerCase().replace(/\./g, '_').replace(/\s/g, '_');
+        var fundObj = haNode.hass.states['sensor.fundamentals_' + ticker + '_fundamentals'];
+        if (!fundObj || !fundObj.attributes || fundObj.attributes.revenueGrowth == null) return '-';
+        
+        var rev = parseFloat(fundObj.attributes.revenueGrowth);
+        if (isNaN(rev)) return '-';
+        
+        var color = rev > 0 ? '#4caf50' : (rev < 0 ? '#f44336' : 'inherit');
+        var sign = rev > 0 ? '+' : '';
+        return '<span style="color:' + color + '; font-weight:bold;">' + sign + (rev * 100).toFixed(1) + '%</span>';
+      })()
+  - name: Earn Growth
+    data: entity_id
+    align: right
+    modify: |-
+      (() => {
+        if (!x) return '-';
+        var haNode = document.querySelector('home-assistant');
+        if (!haNode || !haNode.hass) return '-';
+        var stateObj = haNode.hass.states[x];
+        if (!stateObj || !stateObj.attributes || !stateObj.attributes.ticker) return '-';
+        
+        var ticker = String(stateObj.attributes.ticker).toLowerCase().replace(/\./g, '_').replace(/\s/g, '_');
+        var fundObj = haNode.hass.states['sensor.fundamentals_' + ticker + '_fundamentals'];
+        if (!fundObj || !fundObj.attributes || fundObj.attributes.earningsGrowth == null) return '-';
+        
+        var earn = parseFloat(fundObj.attributes.earningsGrowth);
+        if (isNaN(earn)) return '-';
+        
+        var color = earn > 0 ? '#4caf50' : (earn < 0 ? '#f44336' : 'inherit');
+        var sign = earn > 0 ? '+' : '';
+        return '<span style="color:' + color + '; font-weight:bold;">' + sign + (earn * 100).toFixed(1) + '%</span>';
+      })()
+  - name: Value
+    data: state
+    align: right
+    modify: |-
+      (() => {
+        if (!x) return '';
+        var s = String(x).toLowerCase().trim();
+        if (s === 'unknown' || s === 'unavailable' || s === 'undefined' || s === '') return '';
+        var val = parseFloat(x);
+        return isNaN(val) ? x : val.toFixed(2);
+      })()
+  - name: Target
+    data: entity_id
+    align: right
+    modify: |-
+      (() => {
+        if (!x) return '-';
+        var haNode = document.querySelector('home-assistant');
+        if (!haNode || !haNode.hass) return '-';
+        var stateObj = haNode.hass.states[x];
+        if (!stateObj || !stateObj.attributes || !stateObj.attributes.ticker) return '-';
+        
+        var ticker = String(stateObj.attributes.ticker).toLowerCase().replace(/\./g, '_').replace(/\s/g, '_');
+        var fundObj = haNode.hass.states['sensor.fundamentals_' + ticker + '_fundamentals'];
+        if (!fundObj || !fundObj.attributes || fundObj.attributes.targetMedianPrice == null) return '-';
+        
+        var target = parseFloat(fundObj.attributes.targetMedianPrice);
+        return isNaN(target) ? '-' : Math.trunc(target);
+      })()
+  - name: Low Limit
+    data: entity_id
+    align: center
+    modify: |-
+      (() => {
+        if (!x) return '-';
+        var haNode = document.querySelector('home-assistant');
+        if (!haNode || !haNode.hass) return '-';
+        var stateObj = haNode.hass.states[x];
+        if (!stateObj || !stateObj.attributes || !stateObj.attributes.ticker) return '-';
+        
+        var ticker = String(stateObj.attributes.ticker).toLowerCase().replace(/\./g, '_').replace(/\s/g, '_');
+        var limitObj = haNode.hass.states['number.watchlist_' + ticker + '_low_limit'];
+        if (!limitObj || limitObj.state === 'unknown' || limitObj.state === 'unavailable') return '-';
+        
+        var limitVal = parseFloat(limitObj.state);
+        if (isNaN(limitVal) || limitVal === 0) return '-';
+        
+        var price = parseFloat(stateObj.state);
+        if (!isNaN(price) && price <= (limitVal * 1.02)) {
+          return '<div style="background-color: rgba(76, 175, 80, 0.2); color: #4caf50; font-weight: bold; border-radius: 4px; padding: 4px; box-sizing: border-box;">' + limitVal + '</div>';
+        }
+        return String(limitVal);
+      })()
+  - name: Short list
+    data: entity_id
+    align: center
+    modify: |-
+      (() => {
+        if (!x) return '-';
+        var haNode = document.querySelector('home-assistant');
+        if (!haNode || !haNode.hass) return '-';
+        var stateObj = haNode.hass.states[x];
+        if (!stateObj || !stateObj.attributes || !stateObj.attributes.ticker) return '-';
+        
+        var ticker = String(stateObj.attributes.ticker).toLowerCase().replace(/\./g, '_').replace(/\s/g, '_');
+        var fundObj = haNode.hass.states['sensor.fundamentals_' + ticker + '_fundamentals'];
+        
+        if (!fundObj || !fundObj.attributes) return '-';
+        
+        var price = parseFloat(stateObj.state);
+        var target = parseFloat(fundObj.attributes.targetMedianPrice);
+        var growth = parseFloat(fundObj.attributes.projected_1y_growth);
+        var peg = parseFloat(fundObj.attributes.pegRatio);
+        var rec = String(fundObj.attributes.recommendationKey).toLowerCase();
+        
+        if (isNaN(price) || isNaN(target) || isNaN(growth)) return '-';
+        peg = isNaN(peg) ? 99 : peg; // Fail strict checks if PEG is missing
+        
+        var isBuy = rec.includes('buy');
+        var isHold = rec.includes('hold');
+        var isUndervalued = String(fundObj.attributes.valuation).includes('under');
+        var isFairlyValued = String(fundObj.attributes.valuation).includes('fair');
+        
+        // YES Criteria: Buy rating, undervalued OR good PEG, >10% growth, price below target
+        if (isBuy && (peg <= 1.5 || isUndervalued) && growth >= 0.10 && price < target) {
+          return '<span style="color:#4caf50; font-weight:bold;">Yes</span>';
+        }
+        
+        // MAYBE Criteria: Buy/Hold rating, fair PEG, >5% growth, price within 5% of target
+        if ((isBuy || isHold) && (peg <= 2.0 || isFairlyValued) && growth >= 0.05 && price <= (target * 1.05)) {
+          return '<span style="color:#ff9800; font-weight:bold;">Maybe</span>';
+        }
+        
+        return '-';
+      })()
