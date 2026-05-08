@@ -132,6 +132,12 @@ This integration exposes specific services to Home Assistant, allowing you to ma
 
 You can adopt that to your own needs as you see fit (see [Support & Disclaimer](#support--disclaimer))
 
+You can modify that code and use the holding sensors created by this integration to create your own overview dashboard for your stocks (gains/losses etc), example:
+
+<a href="https://github.com/user-attachments/assets/cbd636bd-176e-41c2-9526-9935f3bef1a2" target="_blank">
+  <img width="600" alt="image" src="https://github.com/user-attachments/assets/cbd636bd-176e-41c2-9526-9935f3bef1a2" />
+</a>
+
 ## Installation
 
 ### HACS (Recommended)
