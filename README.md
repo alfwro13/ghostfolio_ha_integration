@@ -167,11 +167,17 @@ This integration uses the following Ghostfolio API endpoints:
 
 The integration updates portfolio data every **15 minutes** by default. This can be customized in the configuration options.
 
-## Support
+## Support & Disclaimer
 
-For issues with this integration, please open an issue on the GitHub repository.
+**⚠️ Disclaimer: Use at Your Own Risk**
 
-For issues with Ghostfolio itself, please refer to the [Ghostfolio GitHub repository](https://github.com/ghostfolio/ghostfolio).
+This custom integration is a personal project and is provided strictly "as is" and without warranty of any kind. By choosing to install and use this integration, you acknowledge and agree to the following:
+
+* **No Support Provided:** The author does not provide technical support, setup assistance, or troubleshooting guidance. Please do not ask for help on how to configure Home Assistant, how to use the integration, or how to fix local environmental issues. 
+* **No Liability:** The author takes absolutely no responsibility for any damage, data loss, misuse, system instability, or any other issues caused by the installation or operation of this software.
+* **Community Driven:** You are free to fork, modify, and use this integration however you see fit. If you encounter bugs, you are welcome to submit a Pull Request, but do not expect immediate fixes or dedicated maintenance.
+
+For issues with Ghostfolio itself, please refer to the official [Ghostfolio GitHub repository](https://github.com/ghostfolio/ghostfolio).
 
 ## License
 
