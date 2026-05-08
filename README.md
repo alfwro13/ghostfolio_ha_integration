@@ -118,6 +118,20 @@ This integration exposes specific services to Home Assistant, allowing you to ma
 
 [**Example Automation (Pre-Market Fetch)**](assets/automation_pre_market_fetch.md)
 
+### 9. Dashboards
+
+[I documented the my watchlist dashboard setup here](assets/watchlist_dashboard.md)
+
+<a href="https://github.com/user-attachments/assets/cbbd469a-b310-4bab-ad70-4be81bc35897" target="_blank">
+  <img width="600" alt="image" src="https://github.com/user-attachments/assets/cbbd469a-b310-4bab-ad70-4be81bc35897" />
+</a>
+
+<a href="https://github.com/user-attachments/assets/e812f2c6-d260-4dfc-804e-59e4f3777104" target="_blank">
+  <img width="600" alt="image" src="https://github.com/user-attachments/assets/e812f2c6-d260-4dfc-804e-59e4f3777104" />
+</a>
+
+You can adopt that to your own needs as you see fit (see Support & Disclaimer)
+
 ## Installation
 
 ### HACS (Recommended)
