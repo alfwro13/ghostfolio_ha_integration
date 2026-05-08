@@ -1,0 +1,581 @@
+title: Watchlist Details
+path: watchlist-details
+sections:
+  - type: grid
+    cards:
+      # 1. Selector
+      - type: entities
+        entities:
+          - entity: select.watchlist_ticker_selector
+
+      # 2. Hero Card (Live Pricing)
+      - type: custom:mushroom-template-card
+        primary: >
+          {% set live = state_attr('sensor.watchlist_selected_fundamental_data', 'live_data') or {} %} 
+          {{ live.get('clean_name', states('select.watchlist_ticker_selector')) }}
+        secondary: >-
+          {% set all = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %}
+          {% set live = state_attr('sensor.watchlist_selected_fundamental_data', 'live_data') or {} %}
+          
+          {% if live.get('market_price') is not none %}
+            {% set price = live.get('market_price') %}
+            {% set change = live.get('change_24h', 0) %}
+            {% set pct = live.get('change_pct_24h', 0) %}
+            {# Fallback logic: check live_data first, then all_data #}
+            {% set curr = live.get('currency') or all.get('currency', '') %}
+            
+            {{ price | round(2) }} {{ curr }} • {{ '+' if change > 0 else '' }}{{ change | round(2) }} ({{ '+' if pct > 0 else '' }}{{ pct | round(2) }}%)
+          {% else %}
+            Live Data Unavailable
+          {% endif %}
+        grid_options:
+          columns: full
+          rows: auto
+        color: >
+          {% set change = (state_attr('sensor.watchlist_selected_fundamental_data', 'live_data') or {}).get('change_24h', 0) %} 
+          {% if change > 0 %} green {% elif change < 0 %} red {% else %} grey {% endif %}
+        features_position: bottom
+        multiline_secondary: true
+        tap_action:
+          action: none
+        vertical: true
+        card_mod:
+          style: |
+            ha-card {
+              {% set change = (state_attr('sensor.watchlist_selected_fundamental_data', 'live_data') or {}).get('change_24h', 0) | float(0) %}
+              background: {{ 'rgba(76, 175, 80, 0.1)' if change > 0 else 'rgba(244, 67, 54, 0.1)' if change < 0 else 'none' }};
+            }
+
+      # 3. Conditional: Equity Links & Valuation
+      - type: conditional
+        conditions:
+          - condition: state
+            entity: sensor.watchlist_selected_asset_type
+            state: equity
+        card:
+          type: vertical-stack
+          cards:
+            - type: markdown
+              content: >-
+                {% set t = states('select.watchlist_ticker_selector') %} 
+                <a href="https://finance.yahoo.com/quote/{{ t }}" target="_blank" class="yahoo-button">
+                  <ha-icon icon="mdi:chart-line"></ha-icon>
+                  <span>Open <span class="ticker">{{ t }}</span> on Yahoo Finance</span>
+                </a>
+              card_mod:
+                style:
+                  ha-markdown:
+                    $: |
+                      /* Remove default markdown padding for a tighter fit */
+                      .rendered-markdown {
+                        padding: 0 !important;
+                      }
+                  .: |
+                    ha-card {
+                      background: none !important;
+                      border: none !important;
+                      box-shadow: none !important;
+                    }
+                    .yahoo-button {
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      gap: 12px;
+                      padding: 14px;
+                      border-radius: 12px;
+                      background: linear-gradient(145deg, rgba(128, 128, 128, 0.15), rgba(128, 128, 128, 0.05));
+                      color: var(--primary-text-color);
+                      text-decoration: none;
+                      font-weight: 600;
+                      border: 1px solid rgba(128, 128, 128, 0.2);
+                      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                    }
+                    .yahoo-button:hover {
+                      background: rgba(128, 128, 128, 0.25);
+                      border-color: var(--accent-color);
+                      transform: translateY(-2px);
+                      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+                    }
+                    .yahoo-button:active {
+                      transform: translateY(0);
+                    }
+                    .ticker {
+                      color: var(--accent-color);
+                    }
+                    ha-icon {
+                      --mdc-icon-size: 20px;
+                      color: var(--accent-color);
+                    }
+            - type: markdown
+              content: >-
+                {% set t = states('select.watchlist_ticker_selector') %}
+                <a href="https://www.tradingview.com/chart/?symbol={{ t }}" target="_blank" class="yahoo-button">
+                  <ha-icon icon="mdi:chart-line"></ha-icon>
+                  <span>Open <span class="ticker">{{ t }}</span> on TradingView</span>
+                </a>
+              card_mod:
+                style:
+                  ha-markdown:
+                    $: |
+                      /* Remove default markdown padding for a tighter fit */
+                      .rendered-markdown {
+                        padding: 0 !important;
+                      }
+                  .: |
+                    ha-card {
+                      background: none !important;
+                      border: none !important;
+                      box-shadow: none !important;
+                    }
+                    .yahoo-button {
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      gap: 12px;
+                      padding: 14px;
+                      border-radius: 12px;
+                      background: linear-gradient(145deg, rgba(128, 128, 128, 0.15), rgba(128, 128, 128, 0.05));
+                      color: var(--primary-text-color);
+                      text-decoration: none;
+                      font-weight: 600;
+                      border: 1px solid rgba(128, 128, 128, 0.2);
+                      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                    }
+                    .yahoo-button:hover {
+                      background: rgba(128, 128, 128, 0.25);
+                      border-color: var(--accent-color);
+                      transform: translateY(-2px);
+                      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+                    }
+                    .yahoo-button:active {
+                      transform: translateY(0);
+                    }
+                    .ticker {
+                      color: var(--accent-color);
+                    }
+                    ha-icon {
+                      --mdc-icon-size: 20px;
+                      color: var(--accent-color);
+                    }
+            - type: custom:mushroom-title-card
+              title: Valuation Metrics
+            - type: grid
+              columns: 3
+              square: false
+              cards:
+                - type: custom:mushroom-template-card
+                  primary: >
+                    {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                    {{ (data.get('marketCap') / 1000000000) | round(2) ~ 'B' if data.get('marketCap') else 'N/A' }}
+                  secondary: Market Cap
+                  icon: mdi:chart-pie
+                  icon_color: purple
+                  layout: vertical
+                - type: custom:mushroom-template-card
+                  primary: >
+                    {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                    {{ data.get('trailingPE') | round(2) if data.get('trailingPE') else 'N/A' }}
+                  secondary: Trailing P/E
+                  icon: mdi:scale-balance
+                  icon_color: indigo
+                  layout: vertical
+                - type: custom:mushroom-template-card
+                  primary: >
+                    {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                    {{ data.get('forwardPE') | round(2) if data.get('forwardPE') else 'N/A' }}
+                  secondary: Forward P/E
+                  icon: mdi:chart-line
+                  icon_color: light-blue
+                  layout: vertical
+                - type: custom:mushroom-template-card
+                  primary: >
+                    {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                    {{ data.get('pegRatio') | round(2) if data.get('pegRatio') else 'N/A' }}
+                  secondary: PEG Ratio
+                  icon: mdi:finance
+                  icon_color: teal
+                  layout: vertical
+                - type: custom:mushroom-template-card
+                  primary: >
+                    {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                    {{ data.get('priceToBook') | round(2) if data.get('priceToBook') else 'N/A' }}
+                  secondary: P/B Ratio
+                  icon: mdi:book-open-variant
+                  icon_color: cyan
+                  layout: vertical
+                - type: custom:mushroom-template-card
+                  primary: >
+                    {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                    {{ data.get('recommendationKey', 'N/A') | replace('_', ' ') | title }}
+                  secondary: Analyst Rec
+                  icon: mdi:account-group
+                  icon_color: >
+                    {% set rec = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data').get('recommendationKey', '') %} 
+                    {% if 'buy' in rec %} green {% elif 'sell' in rec %} red {% else %} orange {% endif %}
+                  layout: vertical
+
+      # 4. History Graph
+      - type: custom:config-template-card
+        entities:
+          - sensor.watchlist_selected_fundamental_data
+          - input_text.watchlist_selected_ticker
+        variables:
+          TARGET_ENTITY: >-
+            states['sensor.watchlist_selected_fundamental_data'].attributes.live_data ? states['sensor.watchlist_selected_fundamental_data'].attributes.live_data.entity_id : 'sensor.unknown'
+          TICKER: states['input_text.watchlist_selected_ticker'].state
+        card:
+          type: custom:mini-graph-card
+          entities:
+            - entity: ${TARGET_ENTITY}
+              attribute: market_price
+          name: ${TICKER + ' - 7 Day History'}
+          hours_to_show: 168
+          points_per_hour: 1
+          line_color: var(--info-color)
+          line_width: 3
+          show:
+            fill: fade
+            icon: false
+            labels: true
+            state: false
+
+  # Section 2: Remaining Details
+  - type: grid
+    cards:
+      # 5. Alert Limit Control
+      - type: custom:config-template-card
+        entities:
+          - select.watchlist_ticker_selector
+        variables:
+          LIMIT_ENTITY: >-
+            'number.watchlist_' + states['select.watchlist_ticker_selector'].state.toLowerCase().replace(/\./g, '_') + '_low_limit'
+        card:
+          type: custom:mushroom-number-card
+          entity: ${LIMIT_ENTITY}
+          name: Low Price Alert Limit
+          icon: mdi:bell-alert-outline
+          icon_color: green
+          layout: horizontal
+          display_mode: buttons
+
+      - type: vertical-stack
+        cards:
+          # 6. Conditional: Equity Remaining Sections
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: sensor.watchlist_selected_asset_type
+                state: equity
+            card:
+              type: vertical-stack
+              cards:
+                - type: custom:mushroom-title-card
+                  title: Growth & Profitability
+                - type: grid
+                  columns: 3
+                  square: false
+                  cards:
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ (data.get('revenueGrowth') * 100) | round(2) ~ '%' if data.get('revenueGrowth') else 'N/A' }}
+                      secondary: Rev Growth
+                      icon: mdi:arrow-top-right-bold-box
+                      icon_color: green
+                      layout: vertical
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ (data.get('earningsGrowth') * 100) | round(2) ~ '%' if data.get('earningsGrowth') else 'N/A' }}
+                      secondary: EPS Growth
+                      icon: mdi:cash-fast
+                      icon_color: emerald
+                      layout: vertical
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ (data.get('profitMargins') * 100) | round(2) ~ '%' if data.get('profitMargins') else 'N/A' }}
+                      secondary: Profit Margin
+                      icon: mdi:percent
+                      icon_color: light-green
+                      layout: vertical
+                - type: custom:mushroom-title-card
+                  title: Technicals & Trend
+                - type: grid
+                  columns: 2
+                  square: false
+                  cards:
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ data.get('fiftyTwoWeekLow', 'N/A') }} - {{ data.get('fiftyTwoWeekHigh', 'N/A') }}
+                      secondary: 52W Range
+                      icon: mdi:calendar-range
+                      icon_color: orange
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ data.get('fiftyDayAverage') | round(2) if data.get('fiftyDayAverage') else 'N/A' }}
+                      secondary: 50-Day Avg
+                      icon: mdi:chart-bell-curve-cumulative
+                      icon_color: amber
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ data.get('targetMeanPrice', 'N/A') }}
+                      secondary: Target Mean
+                      icon: mdi:bullseye-arrow
+                      icon_color: pink
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {% set beta = data.get('beta') or data.get('beta3Year') %} 
+                        {{ beta | round(2) if beta else 'N/A' }}
+                      secondary: Beta
+                      icon: mdi:chart-bell-curve
+                      icon_color: red
+                - type: custom:mushroom-title-card
+                  title: Returns & Safety Net
+                - type: grid
+                  columns: 2
+                  square: false
+                  cards:
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ (data.get('dividendYield') * 100) | round(2) ~ '%' if data.get('dividendYield') else '0.00%' }}
+                      secondary: Div Yield
+                      icon: mdi:hand-coin
+                      icon_color: blue
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ (data.get('payoutRatio') * 100) | round(2) ~ '%' if data.get('payoutRatio') else 'N/A' }}
+                      secondary: Payout Ratio
+                      icon: mdi:bank-transfer-out
+                      icon_color: light-blue
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ data.get('debtToEquity') | round(2) if data.get('debtToEquity') else 'N/A' }}
+                      secondary: Debt/Equity
+                      icon: mdi:scale-unbalanced
+                      icon_color: deep-orange
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ (data.get('shortPercentOfFloat') * 100) | round(2) ~ '%' if data.get('shortPercentOfFloat') else 'N/A' }}
+                      secondary: Short % Float
+                      icon: mdi:trending-down
+                      icon_color: red
+
+          # 7. Conditional: Fund Layout
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: sensor.watchlist_selected_asset_type
+                state: fund
+            card:
+              type: vertical-stack
+              cards:
+                - type: custom:mushroom-title-card
+                  title: Fund Details
+                - type: grid
+                  columns: 2
+                  square: false
+                  cards:
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ (data.get('totalAssets') / 1000000000) | round(2) ~ 'B' if data.get('totalAssets') else 'N/A' }}
+                      secondary: Total Assets
+                      icon: mdi:safe
+                      icon_color: purple
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ data.get('navPrice') | round(2) if data.get('navPrice') else 'N/A' }}
+                      secondary: NAV Price
+                      icon: mdi:tag
+                      icon_color: indigo
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {% set div = data.get('dividend_yield') or data.get('yield') %} 
+                        {{ (div * 100) | round(2) ~ '%' if div else '0.00%' }}
+                      secondary: Yield
+                      icon: mdi:hand-coin
+                      icon_color: blue
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ data.get('trailingPE') | round(2) if data.get('trailingPE') else 'N/A' }}
+                      secondary: Trailing P/E
+                      icon: mdi:scale-balance
+                      icon_color: teal
+                - type: custom:mushroom-title-card
+                  title: Technicals & Trend
+                - type: grid
+                  columns: 2
+                  square: false
+                  cards:
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ data.get('fiftyTwoWeekLow', 'N/A') }}
+                      secondary: 52W Low
+                      icon: mdi:arrow-down-box
+                      icon_color: orange
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ data.get('fiftyTwoWeekHigh', 'N/A') }}
+                      secondary: 52W High
+                      icon: mdi:arrow-up-box
+                      icon_color: green
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ data.get('allTimeLow', 'N/A') }}
+                      secondary: All Time Low
+                      icon: mdi:chevron-double-down
+                      icon_color: deep-orange
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ data.get('allTimeHigh', 'N/A') }}
+                      secondary: All Time High
+                      icon: mdi:chevron-double-up
+                      icon_color: emerald
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ data.get('fiftyDayAverage') | round(2) if data.get('fiftyDayAverage') else 'N/A' }}
+                      secondary: 50-Day Avg
+                      icon: mdi:chart-timeline
+                      icon_color: amber
+                    - type: custom:mushroom-template-card
+                      primary: >
+                        {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %} 
+                        {{ data.get('twoHundredDayAverage') | round(2) if data.get('twoHundredDayAverage') else 'N/A' }}
+                      secondary: 200-Day Avg
+                      icon: mdi:chart-timeline-variant
+                      icon_color: blue-grey
+
+  # Section 3: Legend
+  - type: grid
+    cards:
+      - type: custom:collapsable-cards
+        title: 📖 Legend & Metric Guidelines
+        defaultOpen: true
+        cards:
+          - type: markdown
+            content: |
+              {% set data = state_attr('sensor.watchlist_selected_fundamental_data', 'all_data') or {} %}
+              
+              {% if data and data.items() | count > 0 %}
+                {# Determine Asset Type to match the UI headers #}
+                {% set asset_type = 'equity' %}
+                
+                {% if data.get('legalType') == 'Exchange Traded Fund' or 'ETF' in data.get('friendly_name', '') or (data.get('totalAssets') and not data.get('marketCap')) %}
+                  {% set asset_type = 'fund' %}
+                {% endif %}
+                
+                {% if asset_type == 'equity' %}
+                  ### Valuation Metrics
+                  {%- if data.get('marketCap') %}
+                  * **Market Cap**: The total dollar value of all outstanding shares.
+                  {%- endif %}
+                  {%- if data.get('trailingPE') %}
+                  * **Trailing P/E**: How much you pay for $1 of past profit.
+                  {%- endif %}
+                  {%- if data.get('forwardPE') %}
+                  * **Forward P/E**: How much you pay for $1 of expected future earnings. (*If lower than Trailing P/E, analysts expect profits to grow*).
+                  {%- endif %}
+                  {%- if data.get('pegRatio') %}
+                  * **PEG Ratio**: P/E ratio divided by expected earnings growth. (*1.0 is considered perfectly priced; higher suggests paying a premium for growth*).
+                  {%- endif %}
+                  {%- if data.get('priceToBook') %}
+                  * **Price to Book (P/B)**: Compares market value to net assets. (*High for tech, lower for asset-heavy businesses*).
+                  {%- endif %}
+                  {%- if data.get('recommendationKey') %}
+                  * **Analyst Rec**: The consensus Wall Street rating. (*"Buy" implies expected outperformance*).
+                  {%- endif %}
+                  
+                  ### Growth & Profitability
+                  {%- if data.get('revenueGrowth') %}
+                  * **Revenue Growth**: Shows the top-line sales increase over time.
+                  {%- endif %}
+                  {%- if data.get('earningsGrowth') %}
+                  * **Earnings Growth**: Shows if profit is growing faster than sales (indicating improving efficiency).
+                  {%- endif %}
+                  {%- if data.get('profitMargins') %}
+                  * **Profit Margin**: For every $100 in sales, how much the company keeps as pure profit. (*A high margin is an elite "moat" indicator*).
+                  {%- endif %}
+                  
+                  ### Technicals & Trend
+                  {%- if data.get('fiftyTwoWeekLow') %}
+                  * **52W Range**: Helps you see where the current price sits in the yearly range.
+                  {%- endif %}
+                  {%- if data.get('fiftyDayAverage') %}
+                  * **50-Day Avg**: Moving average used to gauge short-term momentum. (*Current price above the 50d signals a bullish trend*).
+                  {%- endif %}
+                  {%- if data.get('targetMeanPrice') %}
+                  * **Target Mean**: What Wall Street analysts think the stock is currently worth.
+                  {%- endif %}
+                  {%- set beta = data.get('beta') or data.get('beta3Year') %}
+                  {%- if beta %}
+                  * **Beta**: Measures volatility. (*1.0 = market average; > 1.0 means it swings more violently than the S&P 500*).
+                  {%- endif %}
+                  
+                  ### Returns & Safety Net
+                  {%- set div = data.get('dividendYield') or data.get('dividend_yield') %}
+                  {%- if div %}
+                  * **Div Yield**: The percentage of the share price paid out annually as income.
+                  {%- endif %}
+                  {%- if data.get('payoutRatio') %}
+                  * **Payout Ratio**: The percentage of earnings paid to shareholders as dividends. (*Lower means the dividend is safer and has room to grow*).
+                  {%- endif %}
+                  {%- if data.get('debtToEquity') %}
+                  * **Debt/Equity**: Shows how much debt is used to finance assets.
+                  {%- endif %}
+                  {%- if data.get('totalCash') %}
+                  * **Total Cash**: The "war chest". Cash available to survive downturns, fund growth, or execute buybacks.
+                  {%- endif %}
+                  {%- if data.get('shortPercentOfFloat') %}
+                  * **Short % Float**: Percentage of shares held by investors betting the stock will go down. (*Very low means few people are betting against the stock*).
+                  {%- endif %}
+                
+                {% else %}
+                  
+                  ### Fund Details
+                  {%- if data.get('totalAssets') %}
+                  * **Total Assets**: The total amount of capital/assets managed by the fund.
+                  {%- endif %}
+                  {%- if data.get('navPrice') %}
+                  * **NAV Price**: Net Asset Value. The per-share value of the fund's underlying assets.
+                  {%- endif %}
+                  {%- set div = data.get('dividend_yield') or data.get('yield') %}
+                  {%- if div %}
+                  * **Yield**: The percentage of the share price paid out annually as income.
+                  {%- endif %}
+                  {%- if data.get('trailingPE') %}
+                  * **Trailing P/E**: The average P/E ratio of the individual stocks held within the fund.
+                  {%- endif %}
+                  
+                  ### Technicals & Trend
+                  {%- if data.get('fiftyTwoWeekLow') %}
+                  * **52W Low / High**: The lowest and highest price the fund has traded at over the past year.
+                  {%- endif %}
+                  {%- if data.get('allTimeLow') %}
+                  * **All Time Low / High**: The absolute lowest and highest price the fund has ever traded at.
+                  {%- endif %}
+                  {%- if data.get('fiftyDayAverage') or data.get('twoHundredDayAverage') %}
+                  * **50d / 200d Avg**: Moving averages used to gauge short-term and long-term momentum.
+                  {%- endif %}
+                
+                {% endif %}
+              
+              {% else %}
+                *Legend unavailable. Select a valid asset to view metric definitions.*
+              {% endif %}
