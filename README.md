@@ -166,8 +166,8 @@ You can adopt that to your own needs as you see fit (see [Support & Disclaimer](
 
 ## API Endpoints Used
 
+### Ghostfolio API
 This integration uses the following Ghostfolio API endpoints:
-
 - `POST /api/v1/auth/anonymous`: For authentication.
 - `GET /api/v1/account`: For retrieving the account list and base currency settings.
 - `GET /api/v2/portfolio/performance`: For retrieving global and per-account performance data.
@@ -177,9 +177,17 @@ This integration uses the following Ghostfolio API endpoints:
 - `GET /api/v1/market-data`: For fetching real-time price and history for watchlist items.
 - `GET /api/v1/health/data-provider/{provider}`: For checking the status of data providers.
 
+### Yahoo Finance API (Direct)
+To provide real-time updates and deep analysis, the integration communicates directly with Yahoo Finance endpoints:
+- **Real-time & Pre-market Data**: Uses the `v7/finance/quote` endpoint to fetch live prices, pre-market/post-market values, and US market status.
+- **Daily Fundamentals & Technicals**: Uses the `v10/finance/quoteSummary` endpoint to retrieve detailed metrics such as PEG ratios, profit margins, moving averages, and analyst recommendations.
+- **Previous Close**: Fetches official "Previous Close" data via `quoteSummary` to accurately calculate 24h change percentages regardless of local timezone delays.
+
 ## Data Update Frequency
 
 The integration updates portfolio data every **15 minutes** by default. This can be customized in the configuration options.
+
+## Support & Disclaimer
 
 ## Support & Disclaimer
 
@@ -187,6 +195,7 @@ The integration updates portfolio data every **15 minutes** by default. This can
 
 This custom integration is a personal project and is provided strictly "as is" and without warranty of any kind. By choosing to install and use this integration, you acknowledge and agree to the following:
 
+* **Personal Project Disclosure:** I am not a professional developer, nor do I specialize in finance or stock markets. The sole purpose of this repository is to assist me with managing my personal portfolio and to visualize data in ways that exceed Ghostfolio's native capabilities.
 * **No Support Provided:** The author does not provide technical support, setup assistance, or troubleshooting guidance. Please do not ask for help on how to configure Home Assistant, how to use the integration, or how to fix local environmental issues. 
 * **Consult AI for Help:** If you run into issues, encounter errors, or need help creating automations for this integration, it is highly recommended to consult your preferred AI (such as ChatGPT, Claude, or Gemini). Paste your YAML, error logs, and what you are trying to achieve, and they can usually help you resolve it.
 * **No Liability:** The author takes absolutely no responsibility for any damage, data loss, misuse, system instability, or any other issues caused by the installation or operation of this software.
