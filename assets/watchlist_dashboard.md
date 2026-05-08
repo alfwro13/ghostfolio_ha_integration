@@ -44,7 +44,7 @@ This `input_text` acts as the stable database to store your current selection.
 input_text:
   watchlist_selected_ticker:
     name: Watchlist Selected Ticker
-    max: 20
+    max: 100
 ```
 <a href="https://github.com/user-attachments/assets/dbe8f624-ff73-438a-bd0c-dd59cea2cf94" target="_blank">
   <img width="600" alt="image" src="https://github.com/user-attachments/assets/dbe8f624-ff73-438a-bd0c-dd59cea2cf94" />
@@ -142,8 +142,13 @@ template:
 
 Some of the sensors can be setup using GUI some are only available via the configuration.yaml
 Once the above is done you should see this in your helpers:
-<img width="1724" height="622" alt="image" src="https://github.com/user-attachments/assets/65341729-6b54-49f0-a6b2-4a43b5f81086" />
-<img width="638" height="1741" alt="image" src="https://github.com/user-attachments/assets/b8130fb5-7290-4646-b51d-b78199e7cf15" />
+<a href="https://github.com/user-attachments/assets/65341729-6b54-49f0-a6b2-4a43b5f81086" target="_blank">
+  <img width="600" alt="image" src="https://github.com/user-attachments/assets/65341729-6b54-49f0-a6b2-4a43b5f81086" />
+</a>
+
+<a href="https://github.com/user-attachments/assets/b8130fb5-7290-4646-b51d-b78199e7cf15" target="_blank">
+  <img width="600" alt="image" src="https://github.com/user-attachments/assets/b8130fb5-7290-4646-b51d-b78199e7cf15" />
+</a>
 
 
 ---
