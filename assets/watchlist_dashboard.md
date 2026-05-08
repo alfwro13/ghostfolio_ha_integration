@@ -2,7 +2,10 @@
 
 Using data provided by the integration it is possible to visualize the watchlist entities in a miningfull table where you can filter/sort and search for items:
 
-![watchlist dashboard](assets/watchlist.png)
+<a href="https://github.com/user-attachments/assets/cbbd469a-b310-4bab-ad70-4be81bc35897" target="_blank">
+  <img width="600" alt="image" src="https://github.com/user-attachments/assets/cbbd469a-b310-4bab-ad70-4be81bc35897" />
+</a>
+
 
 and a detailed dashboard for selected entities:
 
