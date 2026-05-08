@@ -159,9 +159,9 @@ This is the complete YAML for the UI:
 
 Watchlist Dashboard - it is a single card panel (so it displays on the whole page)
 
-[Watchlist Dashboard](asset/watchlist_card.yaml)
+[Watchlist Dashboard](watchlist_card.yaml)
 
 And this is the Watchlist Details setup as copied from the Home Assistant Raw Configuration Editor:
 
-[Watchlist Details Dashboard](assets/watchlist_details.yaml)
+[Watchlist Details Dashboard](watchlist_details.yaml)
 
