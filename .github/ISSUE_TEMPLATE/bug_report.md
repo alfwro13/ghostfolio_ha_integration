@@ -7,6 +7,12 @@ assignees: ''
 
 ---
 
+## ✅ Pre-submission Checklist
+*Please check all applicable boxes before submitting your issue:*
+- [ ] I have read the **Support & Disclaimer** section in the README.
+- [ ] I have consulted my preferred AI (e.g., ChatGPT, Claude, Gemini) with my error logs and YAML configurations to try and resolve this issue myself.
+- [ ] I am running the latest version of the integration.
+
 **Describe the bug**
 A clear and concise description of what the bug is.
 
