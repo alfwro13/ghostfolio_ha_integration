@@ -9,7 +9,10 @@ Using data provided by the integration it is possible to visualize the watchlist
 
 and a detailed dashboard for selected entities:
 
-![watchlist dashboard - details sub-page](assets/watchlist_details.png)
+<a href="https://github.com/user-attachments/assets/e812f2c6-d260-4dfc-804e-59e4f3777104" target="_blank">
+  <img width="600" alt="image" src="https://github.com/user-attachments/assets/e812f2c6-d260-4dfc-804e-59e4f3777104" />
+</a>
+
 
 The setup of those require some work and below I have documented it as best as I can remember, so if I have missed a step please forgive me. This setup requires good knowledge of Home Assistant. If you do get lost - figure it out - do not ask me for help.
 
@@ -43,6 +46,10 @@ input_text:
     name: Watchlist Selected Ticker
     max: 20
 ```
+<a href="https://github.com/user-attachments/assets/dbe8f624-ff73-438a-bd0c-dd59cea2cf94" target="_blank">
+  <img width="600" alt="image" src="https://github.com/user-attachments/assets/dbe8f624-ff73-438a-bd0c-dd59cea2cf94" />
+</a>
+
 
 ### 2. The Template Select & Data Bridge
 This YAML handles the dropdown options, data aggregation, and conditional UI logic.
