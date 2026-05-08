@@ -189,10 +189,6 @@ The integration updates portfolio data every **15 minutes** by default. This can
 
 ## Support & Disclaimer
 
-## Support & Disclaimer
-
-## Support & Disclaimer
-
 **⚠️ Disclaimer: Use at Your Own Risk**
 
 This custom integration is a personal project and is provided strictly "as is" and without warranty of any kind. By choosing to install and use this integration, you acknowledge and agree to the following:
