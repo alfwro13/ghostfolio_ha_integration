@@ -122,7 +122,6 @@ This integration exposes specific services to Home Assistant, allowing you to ma
 
 [I documented my watchlist dashboard setup here](assets/watchlist_dashboard.md)
 
-https://github.com/user-attachments/assets/037c145e-b2d2-4bef-be31-805ea971f3a6
 
 You can adopt that to your own needs as you see fit (see [Support & Disclaimer](#support--disclaimer))
 
