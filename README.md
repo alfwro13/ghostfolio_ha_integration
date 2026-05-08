@@ -174,6 +174,7 @@ The integration updates portfolio data every **15 minutes** by default. This can
 This custom integration is a personal project and is provided strictly "as is" and without warranty of any kind. By choosing to install and use this integration, you acknowledge and agree to the following:
 
 * **No Support Provided:** The author does not provide technical support, setup assistance, or troubleshooting guidance. Please do not ask for help on how to configure Home Assistant, how to use the integration, or how to fix local environmental issues. 
+* **Consult AI for Help:** If you run into issues, encounter errors, or need help creating automations for this integration, it is highly recommended to consult your preferred AI (such as ChatGPT, Claude, or Gemini). Paste your YAML, error logs, and what you are trying to achieve, and they can usually help you resolve it.
 * **No Liability:** The author takes absolutely no responsibility for any damage, data loss, misuse, system instability, or any other issues caused by the installation or operation of this software.
 * **Community Driven:** You are free to fork, modify, and use this integration however you see fit. If you encounter bugs, you are welcome to submit a Pull Request, but do not expect immediate fixes or dedicated maintenance.
 
