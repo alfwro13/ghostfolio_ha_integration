@@ -183,6 +183,29 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
                      
         return True
 
+    def _calculate_unrealized_pnl(self, target_account_id: str | None = None) -> tuple[float, float]:
+        """Helper to calculate true unrealized P&L and cost basis from active holdings."""
+        if not self.coordinator.data:
+            return 0.0, 0.0
+
+        holdings_map = self.coordinator.data.get("account_holdings", {})
+        total_pnl = 0.0
+        total_cost = 0.0
+
+        # Scan a specific account, or all accounts if none specified
+        accounts_to_scan = [target_account_id] if target_account_id else holdings_map.keys()
+
+        for acc_id in accounts_to_scan:
+            for data in holdings_map.get(acc_id, []):
+                quantity = float(data.get("quantity") or 0)
+                if quantity > 0:
+                    cost = float(data.get("investment") or 0)
+                    val = float(data.get("valueInBaseCurrency") or data.get("value") or 0)
+                    total_pnl += (val - cost)
+                    total_cost += cost
+
+        return total_pnl, total_cost
+
 
 # --- GLOBAL SENSORS ---
 
@@ -211,24 +234,11 @@ class GhostfolioNetPerformanceSensor(GhostfolioBaseSensor):
     def __init__(self, coordinator, config_entry):
         super().__init__(coordinator, config_entry)
         self._attr_unique_id = f"ghostfolio_net_performance_{config_entry.entry_id}"
-        
     @property
     def native_value(self) -> float | None:
         if not self.is_portfolio_healthy: return None
-        
-        # --- OVERRIDE: Calculate Global Unrealized P&L from all active holdings ---
-        all_holdings = self.coordinator.data.get("account_holdings", {})
-        total_unrealized = 0.0
-        
-        for account_id, holdings_list in all_holdings.items():
-            for data in holdings_list:
-                quantity = float(data.get("quantity") or 0)
-                if quantity > 0:
-                    investment = float(data.get("investment") or 0)
-                    current_val = float(data.get("valueInBaseCurrency") or data.get("value") or 0)
-                    total_unrealized += (current_val - investment)
-                    
-        return round(total_unrealized, 2)
+        pnl, _ = self._calculate_unrealized_pnl()
+        return round(pnl, 2)
 
 class GhostfolioTimeWeightedReturnSensor(GhostfolioBaseSensor):
     _attr_name = "Time-Weighted Return %"
@@ -304,10 +314,9 @@ class GhostfolioSimpleGainPercentSensor(GhostfolioBaseSensor):
     @property
     def native_value(self) -> float | None:
         if not self.is_portfolio_healthy: return None
-        current_value = self.global_performance_data.get("currentValueInBaseCurrency")
-        total_investment = self.global_performance_data.get("totalInvestment")
-        if current_value is None or total_investment is None or total_investment == 0: return None
-        return round(((current_value - total_investment) / total_investment) * 100, 2)
+        pnl, cost = self._calculate_unrealized_pnl()
+        if cost == 0: return None
+        return round((pnl / cost) * 100, 2)
 
 class GhostfolioPortfolioDividendSensor(GhostfolioBaseSensor):
     _attr_name = "Portfolio Total Dividend"
@@ -412,24 +421,11 @@ class GhostfolioAccountPerformanceSensor(GhostfolioAccountBaseSensor):
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_perf_{self.account_id}_{config_entry.entry_id}"
         self._attr_name = f"{self.account_name} Gain"
-        
     @property
     def native_value(self) -> float | None:
         if not self.is_account_healthy: return None
-        
-        # --- OVERRIDE: Calculate Unrealized P&L directly from active holdings ---
-        holdings_map = self.coordinator.data.get("account_holdings", {})
-        holdings_list = holdings_map.get(self.account_id, [])
-        
-        total_unrealized = 0.0
-        for data in holdings_list:
-            quantity = float(data.get("quantity") or 0)
-            if quantity > 0:
-                investment = float(data.get("investment") or 0)
-                current_val = float(data.get("valueInBaseCurrency") or data.get("value") or 0)
-                total_unrealized += (current_val - investment)
-                
-        return round(total_unrealized, 2)
+        pnl, _ = self._calculate_unrealized_pnl(self.account_id)
+        return round(pnl, 2)
 
 class GhostfolioAccountTWRSensor(GhostfolioAccountBaseSensor):
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -462,10 +458,9 @@ class GhostfolioAccountSimpleGainSensor(GhostfolioAccountBaseSensor):
     @property
     def native_value(self) -> float | None:
         if not self.is_account_healthy: return None
-        current_value = self.account_performance_data.get("currentValueInBaseCurrency")
-        total_investment = self.account_performance_data.get("totalInvestment")
-        if current_value is None or total_investment is None or total_investment == 0: return None
-        return round(((current_value - total_investment) / total_investment) * 100, 2)
+        pnl, cost = self._calculate_unrealized_pnl(self.account_id)
+        if cost == 0: return None
+        return round((pnl / cost) * 100, 2)
 
 class GhostfolioAccountDividendSensor(GhostfolioAccountBaseSensor):
     _attr_device_class = SensorDeviceClass.MONETARY
