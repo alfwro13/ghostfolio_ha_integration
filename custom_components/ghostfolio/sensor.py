@@ -51,11 +51,13 @@ async def async_setup_entry(
         global_sensors = [
             GhostfolioCurrentValueSensor(coordinator, config_entry),
             GhostfolioNetPerformanceSensor(coordinator, config_entry),
+            GhostfolioUnrealizedPnLSensor(coordinator, config_entry),
             GhostfolioTimeWeightedReturnSensor(coordinator, config_entry),
             GhostfolioTotalInvestmentSensor(coordinator, config_entry),
             GhostfolioNetPerformanceWithCurrencySensor(coordinator, config_entry),
             GhostfolioTimeWeightedReturnFXSensor(coordinator, config_entry),
             GhostfolioSimpleGainPercentSensor(coordinator, config_entry),
+            GhostfolioUnrealizedPnLPercentSensor(coordinator, config_entry),
             GhostfolioPortfolioDividendSensor(coordinator, config_entry),
         ]
         async_add_entities(global_sensors)
@@ -82,8 +84,10 @@ async def async_setup_entry(
                     GhostfolioAccountNetWorthSensor(coordinator, config_entry, account),
                     GhostfolioAccountCostSensor(coordinator, config_entry, account),
                     GhostfolioAccountPerformanceSensor(coordinator, config_entry, account),
+                    GhostfolioAccountUnrealizedPnLSensor(coordinator, config_entry, account),
                     GhostfolioAccountTWRSensor(coordinator, config_entry, account),
                     GhostfolioAccountSimpleGainSensor(coordinator, config_entry, account),
+                    GhostfolioAccountUnrealizedPnLPercentSensor(coordinator, config_entry, account),
                     GhostfolioAccountDividendSensor(coordinator, config_entry, account),
                 ]
                 for sens in account_sensors:
@@ -243,6 +247,41 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
 
         return total_pnl, total_cost
 
+    def _calculate_live_total_gain(self, target_account_id: str | None = None) -> tuple[float, float]:
+        """Helper to calculate Total Live Gain (Live Total Value - Fiat Deposited)."""
+        if not self.coordinator.data:
+            return 0.0, 0.0
+
+        holdings_map = self.coordinator.data.get("account_holdings", {})
+        live_total_value = 0.0
+
+        accounts_to_scan = [target_account_id] if target_account_id else list(holdings_map.keys())
+
+        for acc_id in accounts_to_scan:
+            holdings_list = holdings_map.get(acc_id)
+            if not holdings_list:
+                continue
+                
+            for data in holdings_list:
+                try:
+                    # Include all items to get live account value
+                    val = float(data.get("valueInBaseCurrency") or data.get("value") or 0)
+                    live_total_value += val
+                except (ValueError, TypeError):
+                    continue
+
+        if target_account_id:
+            performances = self.coordinator.data.get("account_performances", {})
+            perf_data = performances.get(target_account_id, {}).get("performance", {})
+        else:
+            perf_data = self.coordinator.data.get("global_performance", {}).get("performance", {})
+
+        total_investment = float(perf_data.get("totalInvestment") or 0)
+        
+        live_total_gain = live_total_value - total_investment
+
+        return live_total_gain, total_investment
+
 
 # ==========================================
 # GLOBAL SENSORS
@@ -277,7 +316,7 @@ class GhostfolioCurrentValueSensor(GhostfolioBaseSensor):
 
 
 class GhostfolioNetPerformanceSensor(GhostfolioBaseSensor):
-    """Sensor tracking true global Unrealized Gain."""
+    """Sensor tracking Live Total Gain."""
 
     _attr_name = "Portfolio Gain"
     _attr_device_class = SensorDeviceClass.MONETARY
@@ -288,6 +327,26 @@ class GhostfolioNetPerformanceSensor(GhostfolioBaseSensor):
         """Initialize the global gain sensor."""
         super().__init__(coordinator, config_entry)
         self._attr_unique_id = f"ghostfolio_net_performance_{config_entry.entry_id}"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the calculated live total gain."""
+        pnl, _ = self._calculate_live_total_gain()
+        return round(pnl, 2)
+
+
+class GhostfolioUnrealizedPnLSensor(GhostfolioBaseSensor):
+    """Sensor tracking true global Unrealized P&L."""
+
+    _attr_name = "Portfolio Unrealized P&L"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, coordinator, config_entry):
+        """Initialize the global unrealized pnl sensor."""
+        super().__init__(coordinator, config_entry)
+        self._attr_unique_id = f"ghostfolio_unrealized_pnl_{config_entry.entry_id}"
 
     @property
     def native_value(self) -> float | None:
@@ -412,7 +471,34 @@ class GhostfolioSimpleGainPercentSensor(GhostfolioBaseSensor):
 
     @property
     def native_value(self) -> float | None:
-        """Calculate Simple Gain % based on P&L logic."""
+        """Calculate Simple Gain % based on Total Live Gain logic."""
+        pnl, cost = self._calculate_live_total_gain()
+        if cost <= 0: 
+            return 0.0
+        return round((pnl / cost) * 100, 2)
+
+
+class GhostfolioUnrealizedPnLPercentSensor(GhostfolioBaseSensor):
+    """Sensor tracking true global Unrealized Gain %."""
+
+    _attr_name = "Unrealized Gain %"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, coordinator, config_entry):
+        """Initialize the global unrealized return sensor."""
+        super().__init__(coordinator, config_entry)
+        self._attr_unique_id = f"ghostfolio_unrealized_pnl_percent_{config_entry.entry_id}"
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        """Force percentage as the unit."""
+        return PERCENTAGE
+
+    @property
+    def native_value(self) -> float | None:
+        """Calculate Unrealized Gain %."""
         pnl, cost = self._calculate_unrealized_pnl()
         if cost <= 0: 
             return 0.0
@@ -563,7 +649,7 @@ class GhostfolioAccountCostSensor(GhostfolioAccountBaseSensor):
 
 
 class GhostfolioAccountPerformanceSensor(GhostfolioAccountBaseSensor):
-    """Sensor tracking true per-account Unrealized Gain."""
+    """Sensor tracking Live Total Gain per account."""
 
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
@@ -577,7 +663,27 @@ class GhostfolioAccountPerformanceSensor(GhostfolioAccountBaseSensor):
 
     @property
     def native_value(self) -> float | None:
-        """Return the calculated P&L specific to this account."""
+        """Return the calculated live total gain specific to this account."""
+        pnl, _ = self._calculate_live_total_gain(self.account_id)
+        return round(pnl, 2)
+
+
+class GhostfolioAccountUnrealizedPnLSensor(GhostfolioAccountBaseSensor):
+    """Sensor tracking true per-account Unrealized Gain."""
+
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, coordinator, config_entry, account_data):
+        """Initialize the account unrealized gain sensor."""
+        super().__init__(coordinator, config_entry, account_data)
+        self._attr_unique_id = f"ghostfolio_account_unrealized_pnl_{self.account_id}_{config_entry.entry_id}"
+        self._attr_name = f"{self.account_name} Unrealized P&L"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the calculated Unrealized P&L specific to this account."""
         pnl, _ = self._calculate_unrealized_pnl(self.account_id)
         return round(pnl, 2)
 
@@ -629,7 +735,34 @@ class GhostfolioAccountSimpleGainSensor(GhostfolioAccountBaseSensor):
 
     @property
     def native_value(self) -> float | None:
-        """Calculate Simple Gain % based on P&L logic specific to this account."""
+        """Calculate Simple Gain % based on Total Live Gain logic specific to this account."""
+        pnl, cost = self._calculate_live_total_gain(self.account_id)
+        if cost <= 0: 
+            return 0.0
+        return round((pnl / cost) * 100, 2)
+
+
+class GhostfolioAccountUnrealizedPnLPercentSensor(GhostfolioAccountBaseSensor):
+    """Sensor tracking true Unrealized Gain % for the account."""
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, coordinator, config_entry, account_data):
+        """Initialize the account unrealized simple return sensor."""
+        super().__init__(coordinator, config_entry, account_data)
+        self._attr_unique_id = f"ghostfolio_account_unrealized_pnl_percent_{self.account_id}_{config_entry.entry_id}"
+        self._attr_name = f"{self.account_name} Unrealized Gain %"
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        """Force percentage as the unit."""
+        return PERCENTAGE
+
+    @property
+    def native_value(self) -> float | None:
+        """Calculate Unrealized Gain % specific to this account."""
         pnl, cost = self._calculate_unrealized_pnl(self.account_id)
         if cost <= 0: 
             return 0.0
