@@ -30,7 +30,7 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.NUMBER, Platform.BINARY_SENSOR, Platform.BUTTON]
+PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.NUMBER, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SWITCH]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -120,6 +120,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
 
         self._cache_loaded = False
         self._yahoo_crumb = None
+        self.sync_paused = False
 
     async def _get_yahoo_crumb(self, session):
         """Fetch Yahoo Finance crumb to bypass API restrictions."""
@@ -417,6 +418,10 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self):
         """Fetch data from Ghostfolio API."""
+
+        if getattr(self, "sync_paused", False) and self.data is not None:
+            _LOGGER.debug("Ghostfolio sync is paused. Returning last known data.")
+            return self.data
         
         # Load long-term cache exactly once on boot
         if not self._cache_loaded:
@@ -468,7 +473,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             raw_account_holdings = {}
             raw_watchlist_items = []
             
-            show_holdings = self.entry.data.get(CONF_SHOW_HOLDINGS, True)
             show_watchlist = self.entry.data.get(CONF_SHOW_WATCHLIST, True)
 
             # 1. GATHER RAW DATA
@@ -607,6 +611,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             valid_unique_ids.add(f"ghostfolio_provider_{provider.lower()}_{entry_id}")
 
         valid_unique_ids.add(f"ghostfolio_prune_button_{entry_id}")
+        valid_unique_ids.add(f"ghostfolio_pause_sync_{entry_id}")
 
         show_accounts = self.entry.data.get(CONF_SHOW_ACCOUNTS, True)
         accounts_list = self.data.get("accounts", {}).get("accounts", [])
