@@ -483,12 +483,12 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 except Exception:
                     pass
 
-                if show_holdings:
-                    try:
-                        holdings_data = await self.api.get_holdings(account_id=account_id)
-                        raw_account_holdings[account_id] = holdings_data.get("holdings", [])
-                    except Exception:
-                        pass
+                # ALWAYS fetch holdings because Global/Account Gain sensors now require them to calculate P&L
+                try:
+                    holdings_data = await self.api.get_holdings(account_id=account_id)
+                    raw_account_holdings[account_id] = holdings_data.get("holdings", [])
+                except Exception:
+                    pass
 
             if show_watchlist:
                 try:
