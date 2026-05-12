@@ -591,11 +591,13 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         if self.entry.data.get(CONF_SHOW_TOTALS, True):
             valid_unique_ids.add(f"ghostfolio_current_value_{entry_id}")
             valid_unique_ids.add(f"ghostfolio_net_performance_{entry_id}")
+            valid_unique_ids.add(f"ghostfolio_unrealized_pnl_{entry_id}")
             valid_unique_ids.add(f"ghostfolio_net_performance_percent_{entry_id}")
             valid_unique_ids.add(f"ghostfolio_total_investment_{entry_id}")
             valid_unique_ids.add(f"ghostfolio_net_performance_percent_with_currency_{entry_id}")
             valid_unique_ids.add(f"ghostfolio_net_performance_with_currency_{entry_id}")
             valid_unique_ids.add(f"ghostfolio_simple_gain_percent_{entry_id}")
+            valid_unique_ids.add(f"ghostfolio_unrealized_pnl_percent_{entry_id}")
             valid_unique_ids.add(f"ghostfolio_portfolio_dividends_{entry_id}")
 
         valid_unique_ids.add(f"ghostfolio_server_status_{entry_id}")
@@ -618,8 +620,10 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 valid_unique_ids.add(f"ghostfolio_account_net_worth_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_cost_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_perf_{account_id}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_account_unrealized_pnl_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_perf_pct_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_simple_gain_{account_id}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_account_unrealized_pnl_percent_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_dividends_{account_id}_{entry_id}")
 
         if self.entry.data.get(CONF_SHOW_HOLDINGS, True):
