@@ -89,6 +89,7 @@ async def async_setup_entry(
                     GhostfolioAccountSimpleGainSensor(coordinator, config_entry, account),
                     GhostfolioAccountUnrealizedPnLPercentSensor(coordinator, config_entry, account),
                     GhostfolioAccountDividendSensor(coordinator, config_entry, account),
+                    GhostfolioAccountCashBalanceSensor(coordinator, config_entry, account),
                 ]
                 for sens in account_sensors:
                     if sens.unique_id not in known_ids:
@@ -101,6 +102,10 @@ async def async_setup_entry(
                 holdings_list = holdings_map.get(account_id, [])
                 for holding in holdings_list:
                     if float(holding.get("quantity") or 0) > 0:
+                        # FILTER OUT CASH FROM HOLDINGS
+                        if holding.get("assetClass") == "LIQUIDITY":
+                            continue
+                            
                         symbol = holding.get("symbol")
                         safe_symbol = slugify(symbol)
                         unique_id = f"ghostfolio_holding_{account_id}_{safe_symbol}_{config_entry.entry_id}"
@@ -207,7 +212,7 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
         all_holdings = self.coordinator.data.get("account_holdings", {})
         for holdings in all_holdings.values():
             for h in holdings:
-                if float(h.get("quantity") or 0) > 0:
+                if float(h.get("quantity") or 0) > 0 and h.get("assetClass") != "LIQUIDITY":
                     if self._is_provider_down(h.get("dataSource")): 
                         return False
                      
@@ -219,7 +224,7 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
         return True
 
     def _calculate_unrealized_pnl(self, target_account_id: str | None = None) -> tuple[float, float]:
-        """Helper to safely calculate true unrealized P&L from active holdings."""
+        """Helper to safely calculate true unrealized P&L strictly from active equities."""
         if not self.coordinator.data:
             return 0.0, 0.0
 
@@ -235,6 +240,10 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
                 continue
                 
             for data in holdings_list:
+                # FILTER OUT CASH to ensure it doesn't inflate your active investment cost
+                if data.get("assetClass") == "LIQUIDITY":
+                    continue
+                    
                 try:
                     quantity = float(data.get("quantity") or 0)
                     if quantity > 0:
@@ -542,7 +551,7 @@ class GhostfolioAccountBaseSensor(GhostfolioBaseSensor):
         all_holdings = self.coordinator.data.get("account_holdings", {})
         account_holdings = all_holdings.get(self.account_id, [])
         for h in account_holdings:
-            if float(h.get("quantity") or 0) > 0:
+            if float(h.get("quantity") or 0) > 0 and h.get("assetClass") != "LIQUIDITY":
                 if self._is_provider_down(h.get("dataSource")): 
                     return False
                  
@@ -767,6 +776,36 @@ class GhostfolioAccountDividendSensor(GhostfolioAccountBaseSensor):
         acc_divs = dividends.get(self.account_id, {})
         
         return sum(acc_divs.values())
+
+
+class GhostfolioAccountCashBalanceSensor(GhostfolioAccountBaseSensor):
+    """Sensor tracking uninvested cash explicitly."""
+
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_suggested_display_precision = 2
+
+    def __init__(self, coordinator, config_entry, account_data):
+        """Initialize the account cash balance sensor."""
+        super().__init__(coordinator, config_entry, account_data)
+        self._attr_unique_id = f"ghostfolio_account_cash_balance_{self.account_id}_{config_entry.entry_id}"
+        self._attr_name = f"{self.account_name} Cash Balance"
+
+    @property
+    def native_value(self) -> float | None:
+        """Sum the value of any LIQUIDITY assets found within this account."""
+        if not self.coordinator.data: 
+            return 0.0
+            
+        holdings_map = self.coordinator.data.get("account_holdings", {})
+        holdings = holdings_map.get(self.account_id, [])
+        
+        cash_total = 0.0
+        for h in holdings:
+            if h.get("assetClass") == "LIQUIDITY":
+                cash_total += float(h.get("valueInBaseCurrency") or h.get("value") or 0)
+                
+        return cash_total
 
 
 # ==========================================
@@ -1109,7 +1148,7 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
             "low_limit_set": low_val,
             "low_limit_reached": low_reached,
             "high_limit_set": high_val,
-            "high_limit_reached": high_limit_reached,
+            "high_limit_reached": high_reached,
         }
 
 
