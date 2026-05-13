@@ -559,7 +559,11 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 enriched_holdings = []
                 for h in raw_holdings:
                     if float(h.get("quantity") or 0) > 0:
-                        enriched_holdings.append(await self._enrich_item_with_market_data(h))
+                        # Only enrich non-cash assets to save API calls
+                        if h.get("assetClass") == "LIQUIDITY":
+                            enriched_holdings.append(h)
+                        else:
+                            enriched_holdings.append(await self._enrich_item_with_market_data(h))
                 holdings_by_account[account_id] = enriched_holdings
 
             watchlist_items = []
@@ -630,6 +634,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 valid_unique_ids.add(f"ghostfolio_account_simple_gain_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_unrealized_pnl_percent_{account_id}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_account_dividends_{account_id}_{entry_id}")
+                valid_unique_ids.add(f"ghostfolio_account_cash_balance_{account_id}_{entry_id}")
 
         if self.entry.data.get(CONF_SHOW_HOLDINGS, True):
             all_holdings = self.data.get("account_holdings", {})
@@ -640,6 +645,10 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 holdings = all_holdings.get(account_id, [])
                 for h in holdings:
                     if float(h.get("quantity") or 0) > 0:
+                        # Skip adding to valid ids if it's cash, we don't want a holding sensor for it
+                        if h.get("assetClass") == "LIQUIDITY":
+                            continue
+                            
                         symbol = h.get("symbol")
                         safe_symbol = slugify(symbol)
                         valid_unique_ids.add(f"ghostfolio_holding_{account_id}_{safe_symbol}_{entry_id}")
