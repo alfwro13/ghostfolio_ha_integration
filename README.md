@@ -23,36 +23,48 @@ This integration automatically detects your portfolio's base currency and offers
 - **Entity Cleanup:** Built-in tool to remove old or sold assets from Home Assistant.
 
 ### 1. Global Portfolio Sensors
-- **Portfolio Value**: The current total market value of your portfolio.
-- **Portfolio Cost**: The total amount of money you have invested.
-- **Portfolio Gain**: The absolute net performance (Value - Cost).
-- **Portfolio Gain FX**: The absolute net performance including currency effects.
-- **Simple Gain %**: The simple percentage return, calculated as `(Value - Cost) / Cost`.
-- **Time-Weighted Return %**: The Time-Weighted Rate of Return (TWR) of your portfolio (measures strategy performance, ignoring deposits/withdrawals).
-- **Time-Weighted Return FX %**: The TWR percentage including currency effects.
-- **Portfolio Total Dividend**: The total accumulated dividend payments across all accounts.
+These sensors aggregate your entire Ghostfolio setup:
 
-*Note: If any active holding in your portfolio relies on a data provider that is currently down, these global summary sensors will report `Unknown` to prevent misleading data.*
+- **Portfolio Value**: Mapped directly to Ghostfolio's native `currentValueInBaseCurrency` for the global portfolio.
+- **Portfolio Cost**: Mapped directly to Ghostfolio's native `totalInvestment`.
+- **Portfolio Gain**: Mapped to Ghostfolio's native `netPerformance`. This is your absolute bottom-line gain, which correctly tracks Realized P&L when you sell stocks to cash.
+- **Portfolio Gain FX**: Mapped to Ghostfolio's native `netPerformanceWithCurrencyEffect`.
+- **Portfolio Unrealized P&L**: A custom integration calculation. It scans all your active holdings (ignoring Cash/Liquidity), subtracts their specific cost basis from their current live value, and sums the result. It represents exactly how much profit is currently floating in active stocks right now.
+- **Simple Gain %**: Calculated as `(Portfolio Gain / Portfolio Cost) * 100`.
+- **Unrealized Gain %**: Calculated as `(Portfolio Unrealized P&L / Cost of Active Stocks) * 100`.
+- **Time-Weighted Return %**: Mapped to Ghostfolio's native `netPerformancePercentage`. Measures strategy performance, neutralizing the impact of your deposits and withdrawals.
+- **Time-Weighted Return FX %**: Mapped to Ghostfolio's native `netPerformancePercentageWithCurrencyEffect`.
+- **Portfolio Total Dividend**: Calculates the sum of all `DIVIDEND` transactions returned by the Ghostfolio `/api/v1/activities` endpoint across all accounts.
 
 ### 2. Per-Account Sensors
-Sensors are created for each of your Ghostfolio accounts (excluding hidden ones):
-- **[Account Name] Value**: Current market value of the specific account.
-- **[Account Name] Cost**: Total investment in the specific account.
-- **[Account Name] Gain**: Absolute gain/loss for the specific account.
-- **[Account Name] Simple Gain %**: Simple percentage gain/loss for the specific account.
-- **[Account Name] Time-Weighted Return %**: Time-Weighted Return percentage for the specific account.
-- **[Account Name] Total Dividends**: Total accumulated dividends for the specific account.
+Sensors are created for each of your Ghostfolio accounts (excluding accounts marked as hidden). They mirror the Global sensors but strictly isolate data to the specific account ID:
+
+- **[Account Name] Value**: Mapped to `currentValueInBaseCurrency` for the specific account.
+- **[Account Name] Net Worth**: Mapped to `currentNetWorth` for the specific account.
+- **[Account Name] Cost**: Mapped to `totalInvestment` for the specific account.
+- **[Account Name] Gain**: Mapped to the native `netPerformance` for the specific account.
+- **[Account Name] Unrealized P&L**: Custom calculation: `(Live Value of Active Equities in Account) - (Cost of Active Equities in Account)`.
+- **[Account Name] Simple Gain %**: Calculated as `(Account Gain / Account Cost) * 100`.
+- **[Account Name] Unrealized Gain %**: Calculated as `(Account Unrealized P&L / Account Active Equity Cost) * 100`.
+- **[Account Name] Time-Weighted Return %**: Mapped to the native `netPerformancePercentage` for the specific account.
+- **[Account Name] Total Dividends**: Sum of all `DIVIDEND` transactions linked to this specific account ID.
+- **[Account Name] Cash Balance**: A dedicated sensor that extracts and sums any asset holding within the account where the `assetClass` is strictly defined as `LIQUIDITY` (e.g., your GBP, USD, or EUR uninvested cash).
 
 ### 3. Per-Holding Sensors (Assets)
-Track every individual asset in your portfolio with a dedicated sensor:
-- **Sensor State**: Total market value of the holding in your base currency.
+Dedicated sensors are created for every individual asset in your portfolio. *(Note: Uninvested Cash / `LIQUIDITY` assets are intentionally filtered out of this list to prevent dashboard clutter and are instead routed to the Account Cash Balance sensors).*
+
+- **Sensor State**: The total live market value of the holding in your base currency (`Quantity * Live Price`).
 - **Friendly Name**: The ticker symbol (e.g., "AAPL", "VWRL.AS").
-- **Attributes**: 
-  - `market_price`, `average_buy_price`, `number_of_shares`
-  - `gain_value`, `gain_pct`, `trend_vs_buy`
-  - `accumulated_dividends`, `accumulated_dividends_currency`
-  - `low_limit_set`, `low_limit_reached`
-  - `high_limit_set`, `high_limit_reached`
+- **Attributes**:
+  - `market_price`: The live price fetched via Ghostfolio market-data or overridden by the integration's live Yahoo Finance pre-market fetch.
+  - `average_buy_price`: Calculated as `investment / quantity`.
+  - `number_of_shares`: Mapped to the holding's `quantity`.
+  - `gain_value`: Calculated as `(Current Live Value) - (Total Investment Cost)`.
+  - `gain_pct`: Calculated as `(gain_value / Total Investment Cost) * 100`.
+  - `trend_vs_buy`: Reports `up`, `down`, or `break_even` based on whether the current market price is higher or lower than your average buy price.
+  - `accumulated_dividends`: Filters the global activities endpoint for `DIVIDEND` transactions specifically matching this ticker and account.
+  - `low_limit_set` / `low_limit_reached`: Linked to the Number Entity limit helpers.
+  - `high_limit_set` / `high_limit_reached`: Linked to the Number Entity limit helpers.
 
 *Note: If the data provider for a specific holding is down, its sensor will report `Unknown`.*
 
