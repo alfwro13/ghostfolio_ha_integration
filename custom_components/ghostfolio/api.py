@@ -138,6 +138,8 @@ class GhostfolioAPI:
                 elif response.status == 401:
                     _LOGGER.info("Token expired, re-authenticating...")
                     await self.authenticate()
+                    if not self.auth_token:
+                        raise GhostfolioAPIError("Re-authentication did not return a valid token")
                     headers = {"Authorization": f"Bearer {self.auth_token}"}
                     
                     async with self._get_session().get(url, params=params, headers=headers) as retry_response:
