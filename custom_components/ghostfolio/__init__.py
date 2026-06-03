@@ -536,11 +536,21 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 enriched_holdings = []
                 for h in raw_holdings:
                     # --- FIX FOR GHOSTFOLIO 3.7.0 ---
-                    # Checks both lowercase and uppercase variations just to be safe
-                    sp = h.get("symbolProfile") or h.get("SymbolProfile") or {}
-                    for attr in ["symbol", "dataSource", "currency", "assetClass", "name", "assetSubClass"]:
-                        if not h.get(attr) and sp.get(attr):
-                            h[attr] = sp.get(attr)
+                    # 1. Look for standard profile names
+                    sp = h.get("symbolProfile") or h.get("SymbolProfile") or h.get("assetProfile")
+                    
+                    # 2. If not found, deep-scan the holding for any nested dictionary containing 'symbol'
+                    if not sp:
+                        for val in h.values():
+                            if isinstance(val, dict) and "symbol" in val:
+                                sp = val
+                                break
+                    
+                    # 3. Safely map the missing fields back to the top level
+                    if isinstance(sp, dict):
+                        for attr in ["symbol", "dataSource", "currency", "assetClass", "name", "assetSubClass"]:
+                            if not h.get(attr) and sp.get(attr):
+                                h[attr] = sp.get(attr)
                     # --------------------------------
 
                     if float(h.get("quantity") or 0) > 0:
