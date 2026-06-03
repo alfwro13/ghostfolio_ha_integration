@@ -332,8 +332,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 if not real_time_price and history:
                     real_time_price = float(history[-1].get("marketPrice") or 0)
 
-                # --- 1. EXTRACT PRE-MARKET OVERRIDE ---
-                # Check ephemeral cache. No timers needed, cache is managed by market state.
                 premarket_price = None
                 if data_source == "YAHOO" and symbol in self.premarket_cache:
                     premarket_price = self.premarket_cache[symbol]
@@ -341,13 +339,11 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 change_pct = None
                 prev_price = 0
                 
-                # --- 2. PRIMARY METHOD: CACHED PREVIOUS CLOSE ---
                 if data_source == "YAHOO" and symbol in self.previous_close_cache:
                     prev_price = self.previous_close_cache[symbol]
                     if prev_price > 0 and real_time_price > 0:
                         change_pct = ((real_time_price - prev_price) / prev_price) * 100
 
-                # --- 3. FALLBACK METHOD: GHOSTFOLIO HISTORY ---
                 if change_pct is None and history:
                     today_str = dt_util.utcnow().date().isoformat()
                     latest_hist_date = history[-1].get("date", "")[:10]
@@ -365,43 +361,32 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                     if prev_price > 0 and real_time_price > 0:
                         change_pct = ((real_time_price - prev_price) / prev_price) * 100
 
-                # --- 4. APPLY STANDARD DATA ---
                 if change_pct is not None:
                     item["marketChangePercentage"] = change_pct
                     item["marketChange"] = real_time_price - prev_price
 
-              
-                # SAFEGUARD: Override ONLY runs if pre-market price is explicitly loaded, valid, and different
                 if premarket_price is not None and float(premarket_price) > 0 and float(premarket_price) != real_time_price:
                     premarket_price = float(premarket_price)
                     quantity = float(item.get("quantity") or 0)
                     original_value_base = float(item.get("valueInBaseCurrency") or item.get("value") or 0)
                     
                     if real_time_price > 0 and quantity > 0:
-                        # 1. Extract the exact currency conversion rate Ghostfolio natively used
                         implied_fx_rate = original_value_base / (real_time_price * quantity)
-                        
-                        # 2. Calculate the updated holding values based on the premarket price
                         new_value_asset_currency = premarket_price * quantity
                         new_value_base_currency = new_value_asset_currency * implied_fx_rate
                         
-                        # 3. Override the main dictionary keys. HA sensors use these automatically.
                         item["marketPrice"] = premarket_price
                         item["value"] = new_value_asset_currency
                         item["valueInBaseCurrency"] = new_value_base_currency
                         
-                        # 4. Optional: Recalculate 24h change so the % matches the pre-market movement
                         if prev_price > 0:
                             item["marketChangePercentage"] = ((premarket_price - prev_price) / prev_price) * 100
                             item["marketChange"] = premarket_price - prev_price
                             
                         item["is_premarket"] = True
-                        _LOGGER.debug(f"[{symbol}] State overridden with premarket price: {premarket_price}")
                 else:
-                    # Regular market hours: Ensure standard pricing is set and no native values are touched
                     item["marketPrice"] = real_time_price
                     item["is_premarket"] = False
-                # ==========================================
 
                 if history:
                     item["marketDate"] = history[-1].get("date")
@@ -423,7 +408,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("Ghostfolio sync is paused. Returning last known data.")
             return self.data
         
-        # Load long-term cache exactly once on boot
         if not self._cache_loaded:
             stored_data = await self._store.async_load()
             if stored_data:
@@ -438,7 +422,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
 
             self._cache_loaded = True
 
-        # --- UPDATE US MARKET STATE SENSOR ---
         try:
             session = self.api._get_session()
             crumb = await self._get_yahoo_crumb(session)
@@ -448,7 +431,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception:
             pass
 
-        # Smart Purge: Guarantee the cache is empty if the market is open
         if self.us_market_open:
             self.premarket_cache.clear()
 
@@ -475,7 +457,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             
             show_watchlist = self.entry.data.get(CONF_SHOW_WATCHLIST, True)
 
-            # 1. GATHER RAW DATA
             for account in accounts_list:
                 if account.get("isExcluded"):
                     continue
@@ -487,7 +468,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 except Exception:
                     pass
 
-                # ALWAYS fetch holdings because Global/Account Gain sensors now require them to calculate P&L
                 try:
                     holdings_data = await self.api.get_holdings(account_id=account_id)
                     raw_account_holdings[account_id] = holdings_data.get("holdings", [])
@@ -504,7 +484,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 except Exception:
                     pass
 
-            # 2. PROVIDER HEALTH
             provider_results = {}
             async def _fetch_health(code):
                 return await self.api.get_provider_health(code)
@@ -513,10 +492,8 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for res in health_results:
                 provider_results[res["code"]] = res
 
-            # 3. DIVIDENDS ENRICHMENT (Local Ghostfolio API)
             now = dt_util.utcnow()
             if self.last_dividends_update is None or not self.dividends_cache or now.date() > self.last_dividends_update.date():
-                _LOGGER.debug("Fetching Activities data for Dividends")
                 try:
                     activities_resp = await self.api.get_activities()
                     dividend_data = {}
@@ -533,8 +510,9 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                             acc_id = act.get("accountId")
                             
                             sym = act.get("symbol")
-                            if not sym and "SymbolProfile" in act:
-                                sym = act["SymbolProfile"].get("symbol")
+                            if not sym:
+                                sp = act.get("symbolProfile") or act.get("SymbolProfile") or {}
+                                sym = sp.get("symbol")
                             
                             if acc_id and sym:
                                 sym = sym.upper() 
@@ -553,22 +531,19 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
 
             data["dividends"] = self.dividends_cache
 
-            # 4. ENRICH HOLDINGS & WATCHLIST WITH LIVE & CACHED DATA
             holdings_by_account = {}
             for account_id, raw_holdings in raw_account_holdings.items():
                 enriched_holdings = []
                 for h in raw_holdings:
                     # --- FIX FOR GHOSTFOLIO 3.7.0 ---
-                    # Restore removed attributes from the nested SymbolProfile
-                    if "SymbolProfile" in h:
-                        sp = h["SymbolProfile"]
-                        for attr in ["symbol", "dataSource", "currency", "assetClass", "name", "assetSubClass"]:
-                            if not h.get(attr) and sp.get(attr):
-                                h[attr] = sp.get(attr)
+                    # Checks both lowercase and uppercase variations just to be safe
+                    sp = h.get("symbolProfile") or h.get("SymbolProfile") or {}
+                    for attr in ["symbol", "dataSource", "currency", "assetClass", "name", "assetSubClass"]:
+                        if not h.get(attr) and sp.get(attr):
+                            h[attr] = sp.get(attr)
                     # --------------------------------
 
                     if float(h.get("quantity") or 0) > 0:
-                        # Only enrich non-cash assets to save API calls
                         if h.get("assetClass") == "LIQUIDITY":
                             enriched_holdings.append(h)
                         else:
@@ -578,11 +553,10 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             watchlist_items = []
             for w in raw_watchlist_items:
                 # --- FIX FOR GHOSTFOLIO 3.7.0 ---
-                if "SymbolProfile" in w:
-                    sp = w["SymbolProfile"]
-                    for attr in ["symbol", "dataSource", "currency", "assetClass", "name", "assetSubClass"]:
-                        if not w.get(attr) and sp.get(attr):
-                            w[attr] = sp.get(attr)
+                sp = w.get("symbolProfile") or w.get("SymbolProfile") or {}
+                for attr in ["symbol", "dataSource", "currency", "assetClass", "name", "assetSubClass"]:
+                    if not w.get(attr) and sp.get(attr):
+                        w[attr] = sp.get(attr)
                 # --------------------------------
                 watchlist_items.append(await self._enrich_item_with_market_data(w))
 
@@ -661,12 +635,11 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 holdings = all_holdings.get(account_id, [])
                 for h in holdings:
                     if float(h.get("quantity") or 0) > 0:
-                        # Skip adding to valid ids if it's cash, we don't want a holding sensor for it
                         if h.get("assetClass") == "LIQUIDITY":
                             continue
                             
                         symbol = h.get("symbol")
-                        safe_symbol = slugify(symbol)
+                        safe_symbol = slugify(symbol) if symbol else "unknown"
                         valid_unique_ids.add(f"ghostfolio_holding_{account_id}_{safe_symbol}_{entry_id}")
                         valid_unique_ids.add(f"ghostfolio_limit_low_{account_id}_{safe_symbol}_{entry_id}")
                         valid_unique_ids.add(f"ghostfolio_limit_high_{account_id}_{safe_symbol}_{entry_id}")
@@ -675,7 +648,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             watchlist = self.data.get("watchlist", [])
             for item in watchlist:
                 symbol = item.get("symbol")
-                safe_symbol = slugify(symbol)
+                safe_symbol = slugify(symbol) if symbol else "unknown"
                 valid_unique_ids.add(f"ghostfolio_watchlist_{safe_symbol}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_watchlist_limit_low_{safe_symbol}_{entry_id}")
                 valid_unique_ids.add(f"ghostfolio_watchlist_limit_high_{safe_symbol}_{entry_id}")
@@ -683,7 +656,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         if self.entry.data.get(CONF_SHOW_FUNDAMENTALS, False):
             fund_payload = self.data.get("fundamentals_data", {})
             for symbol in fund_payload.keys():
-                safe_symbol = slugify(symbol)
+                safe_symbol = slugify(symbol) if symbol else "unknown"
                 valid_unique_ids.add(f"ghostfolio_fundamentals_{safe_symbol}_{entry_id}")
 
         for entity_entry in entries:
