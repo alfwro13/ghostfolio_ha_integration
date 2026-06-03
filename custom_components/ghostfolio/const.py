@@ -18,6 +18,13 @@ CONF_SHOW_FUNDAMENTALS = "show_fundamentals"
 DEFAULT_NAME = "Ghostfolio"
 DEFAULT_UPDATE_INTERVAL = 15  # minutes
 
+# Yahoo Finance direct API
+YAHOO_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+YAHOO_SESSION_URL = "https://fc.yahoo.com"
+YAHOO_CRUMB_URL = "https://query1.finance.yahoo.com/v1/test/getcrumb"
+YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
+YAHOO_QUOTE_SUMMARY_URL = "https://query2.finance.yahoo.com/v10/finance/quoteSummary"
+
 # Data Providers to check
 DATA_PROVIDERS = [
     "YAHOO",

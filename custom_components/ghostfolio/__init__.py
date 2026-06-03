@@ -16,15 +16,20 @@ from homeassistant.util import slugify
 
 from .api import GhostfolioAPI
 from .const import (
-    CONF_UPDATE_INTERVAL, 
-    DEFAULT_UPDATE_INTERVAL, 
+    CONF_UPDATE_INTERVAL,
+    DEFAULT_UPDATE_INTERVAL,
     CONF_SHOW_TOTALS,
     CONF_SHOW_ACCOUNTS,
     CONF_SHOW_HOLDINGS,
     CONF_SHOW_WATCHLIST,
     CONF_SHOW_FUNDAMENTALS,
     DOMAIN,
-    DATA_PROVIDERS
+    DATA_PROVIDERS,
+    YAHOO_USER_AGENT,
+    YAHOO_SESSION_URL,
+    YAHOO_CRUMB_URL,
+    YAHOO_QUOTE_URL,
+    YAHOO_QUOTE_SUMMARY_URL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -146,11 +151,11 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         if self._yahoo_crumb:
             return self._yahoo_crumb
             
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        headers = {"User-Agent": YAHOO_USER_AGENT}
         try:
-            async with session.get("https://fc.yahoo.com", headers=headers, allow_redirects=True) as resp:
+            async with session.get(YAHOO_SESSION_URL, headers=headers, allow_redirects=True) as resp:
                 pass
-            async with session.get("https://query1.finance.yahoo.com/v1/test/getcrumb", headers=headers) as resp:
+            async with session.get(YAHOO_CRUMB_URL, headers=headers) as resp:
                 if resp.status == 200:
                     self._yahoo_crumb = await resp.text()
                     return self._yahoo_crumb
@@ -216,11 +221,11 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def _async_check_us_market_state(self, session, crumb) -> bool | None:
         """Check if US market is open using SPY as a universal proxy."""
-        url = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=SPY"
+        url = f"{YAHOO_QUOTE_URL}?symbols=SPY"
         if crumb:
             url += f"&crumb={crumb}"
             
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        headers = {"User-Agent": YAHOO_USER_AGENT}
         try:
             async with session.get(url, headers=headers) as response:
                 if response.status == 200:
@@ -256,13 +261,13 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             return
             
         symbol_string = ",".join(tickers)
-        url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbol_string}"
+        url = f"{YAHOO_QUOTE_URL}?symbols={symbol_string}"
         
         try:
             if crumb:
                 url += f"&crumb={crumb}"
                 
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            headers = {"User-Agent": YAHOO_USER_AGENT}
             async with session.get(url, headers=headers) as response:
                 if response.status == 200:
                     resp_json = await response.json()
@@ -292,10 +297,10 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             session = self.api._get_session()
             crumb = await self._get_yahoo_crumb(session)
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            headers = {"User-Agent": YAHOO_USER_AGENT}
             
             for ticker in tickers:
-                url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=price"
+                url = f"{YAHOO_QUOTE_SUMMARY_URL}/{ticker}?modules=price"
                 if crumb: 
                     url += f"&crumb={crumb}"
                     
@@ -329,10 +334,10 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         try:
             session = self.api._get_session()
             crumb = await self._get_yahoo_crumb(session)
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            headers = {"User-Agent": YAHOO_USER_AGENT}
             
             for ticker in tickers:
-                url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker}?modules=defaultKeyStatistics,financialData,summaryDetail,earningsTrend"
+                url = f"{YAHOO_QUOTE_SUMMARY_URL}/{ticker}?modules=defaultKeyStatistics,financialData,summaryDetail,earningsTrend"
                 if crumb: 
                     url += f"&crumb={crumb}"
                     
