@@ -1,6 +1,7 @@
 """API client for Ghostfolio."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -128,34 +129,39 @@ class GhostfolioAPI:
 
         headers = {"Authorization": f"Bearer {self.auth_token}"}
 
-        try:
-            async with self._get_session().get(url, params=params, headers=headers) as response:
-                if response.status == 200:
-                    try:
-                        return await response.json()
-                    except ValueError as err:
-                        raise GhostfolioAPIError(f"Invalid JSON response from {url}") from err
-                elif response.status == 401:
-                    _LOGGER.info("Token expired, re-authenticating...")
-                    await self.authenticate()
-                    if not self.auth_token:
-                        raise GhostfolioAPIError("Re-authentication did not return a valid token")
-                    headers = {"Authorization": f"Bearer {self.auth_token}"}
-                    
-                    async with self._get_session().get(url, params=params, headers=headers) as retry_response:
-                        if retry_response.status == 200:
-                            try:
-                                return await retry_response.json()
-                            except ValueError as err:
-                                raise GhostfolioAPIError(f"Invalid JSON response from {url} after re-auth") from err
-                        else:
-                            raise GhostfolioAPIError(f"API request failed after re-auth: {retry_response.status}")
-                else:
-                    response_text = await response.text()
-                    _LOGGER.error("Failed to fetch data from %s: %s", url, response_text[:500])
-                    raise GhostfolioAPIError(f"API request failed: {response.status}")
-        except aiohttp.ClientError as err:
-            raise GhostfolioAPIError(f"Connection error: {err}") from err
+        for attempt in range(3):
+            try:
+                async with self._get_session().get(url, params=params, headers=headers) as response:
+                    if response.status == 200:
+                        try:
+                            return await response.json()
+                        except ValueError as err:
+                            raise GhostfolioAPIError(f"Invalid JSON response from {url}") from err
+                    elif response.status == 401:
+                        _LOGGER.info("Token expired, re-authenticating...")
+                        await self.authenticate()
+                        if not self.auth_token:
+                            raise GhostfolioAPIError("Re-authentication did not return a valid token")
+                        headers = {"Authorization": f"Bearer {self.auth_token}"}
+
+                        async with self._get_session().get(url, params=params, headers=headers) as retry_response:
+                            if retry_response.status == 200:
+                                try:
+                                    return await retry_response.json()
+                                except ValueError as err:
+                                    raise GhostfolioAPIError(f"Invalid JSON response from {url} after re-auth") from err
+                            else:
+                                raise GhostfolioAPIError(f"API request failed after re-auth: {retry_response.status}")
+                    else:
+                        response_text = await response.text()
+                        _LOGGER.error("Failed to fetch data from %s: %s", url, response_text[:500])
+                        raise GhostfolioAPIError(f"API request failed: {response.status}")
+            except aiohttp.ClientError as err:
+                if attempt < 2:
+                    _LOGGER.debug("Request to %s failed, retrying (attempt %d/3): %s", url, attempt + 1, err)
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                raise GhostfolioAPIError(f"Connection error after 3 attempts: {err}") from err
 
     def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
