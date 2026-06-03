@@ -52,8 +52,10 @@ async def async_setup_entry(
                 if account.get("isExcluded", False):
                     continue
 
-                account_id = account["id"]
-                account_name = account["name"]
+                account_id = account.get("id")
+                account_name = account.get("name", "Unknown Account")
+                if not account_id:
+                    continue
                 holdings_map = coordinator.data.get("account_holdings", {})
                 holdings_list = holdings_map.get(account_id, [])
 

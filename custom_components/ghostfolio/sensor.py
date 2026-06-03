@@ -76,8 +76,10 @@ async def async_setup_entry(
             if account.get("isExcluded", False):
                 continue
                 
-            account_id = account["id"]
-            account_name = account["name"]
+            account_id = account.get("id")
+            account_name = account.get("name", "Unknown Account")
+            if not account_id:
+                continue
 
             # Process Per-Account Sensors
             if show_accounts:
