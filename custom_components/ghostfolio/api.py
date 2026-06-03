@@ -149,11 +149,10 @@ class GhostfolioAPI:
                             except ValueError as err:
                                 raise GhostfolioAPIError(f"Invalid JSON response from {url} after re-auth") from err
                         else:
-                            response_text = await retry_response.text()
                             raise GhostfolioAPIError(f"API request failed after re-auth: {retry_response.status}")
                 else:
                     response_text = await response.text()
-                    _LOGGER.error("Failed to fetch data from %s: %s", url, response_text)
+                    _LOGGER.error("Failed to fetch data from %s: %s", url, response_text[:500])
                     raise GhostfolioAPIError(f"API request failed: {response.status}")
         except aiohttp.ClientError as err:
             raise GhostfolioAPIError(f"Connection error: {err}") from err
