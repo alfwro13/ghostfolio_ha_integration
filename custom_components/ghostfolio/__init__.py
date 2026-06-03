@@ -508,8 +508,14 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             async def _fetch_health(code):
                 return await self.api.get_provider_health(code)
 
-            health_results = await asyncio.gather(*[_fetch_health(p) for p in DATA_PROVIDERS])
+            health_results = await asyncio.gather(
+                *[_fetch_health(p) for p in DATA_PROVIDERS],
+                return_exceptions=True,
+            )
             for res in health_results:
+                if isinstance(res, Exception):
+                    _LOGGER.debug("Provider health check failed: %s", res)
+                    continue
                 provider_results[res["code"]] = res
 
             now = dt_util.utcnow()
