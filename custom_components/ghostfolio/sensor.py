@@ -964,9 +964,8 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         dividends_map = self.coordinator.data.get("dividends", {})
         account_dividends = dividends_map.get(self.account_id, {})
         
-        # DEFENSIVE CHECK
         accumulated_dividends = 0.0
-        if self.symbol:
+        if self.symbol is not None:
             accumulated_dividends = account_dividends.get(self.symbol.upper(), 0.0)
 
         return {
