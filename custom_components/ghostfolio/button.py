@@ -64,7 +64,7 @@ class GhostfolioClearWatchlistLimitsButton(CoordinatorEntity, ButtonEntity):
         self.limit_type = limit_type
         self._attr_unique_id = f"ghostfolio_clear_watchlist_{limit_type}_limits_{config_entry.entry_id}"
         self._attr_translation_key = f"clear_watchlist_{limit_type}_limits"
-        self._attr_icon = "mdi:arrow-up-circle-outline" if limit_type == "high" else "mdi:arrow-down-circle-outline"
+        self._attr_icon = "mdi:eye-off-outline"
 
         portfolio_name = config_entry.data.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
         self._attr_device_info = {
@@ -75,7 +75,7 @@ class GhostfolioClearWatchlistLimitsButton(CoordinatorEntity, ButtonEntity):
         }
 
     async def async_press(self) -> None:
-        """Set all watchlist limits of this type to 0 (no limit)."""
+        """Disable all watchlist limit entities of this type in the entity registry."""
         registry = er.async_get(self.hass)
         pattern = f"ghostfolio_watchlist_limit_{self.limit_type}_"
 
@@ -83,9 +83,7 @@ class GhostfolioClearWatchlistLimitsButton(CoordinatorEntity, ButtonEntity):
             if entity_entry.disabled_by is not None:
                 continue
             if entity_entry.domain == "number" and pattern in entity_entry.unique_id:
-                await self.hass.services.async_call(
-                    "number",
-                    "set_value",
-                    {"entity_id": entity_entry.entity_id, "value": 0},
-                    blocking=True,
+                registry.async_update_entity(
+                    entity_entry.entity_id,
+                    disabled_by=er.RegistryEntryDisabler.USER,
                 )
