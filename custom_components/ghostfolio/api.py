@@ -36,7 +36,10 @@ class GhostfolioAPI:
         try:
             async with self._get_session().post(url, json=payload) as response:
                 if response.status in [200, 201]:
-                    data = await response.json()
+                    try:
+                        data = await response.json()
+                    except ValueError as err:
+                        raise GhostfolioAPIError("Invalid JSON in authentication response") from err
                     self.auth_token = data.get("authToken")
                     return self.auth_token
                 else:
@@ -128,7 +131,10 @@ class GhostfolioAPI:
         try:
             async with self._get_session().get(url, params=params, headers=headers) as response:
                 if response.status == 200:
-                    return await response.json()
+                    try:
+                        return await response.json()
+                    except ValueError as err:
+                        raise GhostfolioAPIError(f"Invalid JSON response from {url}") from err
                 elif response.status == 401:
                     _LOGGER.info("Token expired, re-authenticating...")
                     await self.authenticate()
@@ -136,7 +142,10 @@ class GhostfolioAPI:
                     
                     async with self._get_session().get(url, params=params, headers=headers) as retry_response:
                         if retry_response.status == 200:
-                            return await retry_response.json()
+                            try:
+                                return await retry_response.json()
+                            except ValueError as err:
+                                raise GhostfolioAPIError(f"Invalid JSON response from {url} after re-auth") from err
                         else:
                             response_text = await retry_response.text()
                             raise GhostfolioAPIError(f"API request failed after re-auth: {retry_response.status}")
