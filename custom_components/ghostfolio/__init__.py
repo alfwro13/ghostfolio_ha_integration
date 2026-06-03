@@ -159,17 +159,34 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.debug(f"Yahoo crumb fetch failed: {e}")
         return None
 
+    def _schedule_refresh(self) -> None:
+        """Override to suppress timer scheduling when sync is paused."""
+        if not self.sync_paused:
+            super()._schedule_refresh()
+
+    async def async_set_sync_paused(self, paused: bool) -> None:
+        """Pause or resume data synchronization and persist the state."""
+        self.sync_paused = paused
+        await self._save_cache()
+        if paused:
+            if self._unsub_refresh:
+                self._unsub_refresh()
+                self._unsub_refresh = None
+        else:
+            await self.async_request_refresh()
+
     async def _save_cache(self):
         """Save the current caches to HA storage."""
         payload = {
             "fundamentals_data": self.fundamentals_cache,
             "previous_close_data": self.previous_close_cache,
+            "sync_paused": self.sync_paused,
         }
         if self.last_fundamentals_update:
             payload["last_fundamentals_update"] = self.last_fundamentals_update.isoformat()
         if self.last_previous_close_update:
             payload["last_previous_close_update"] = self.last_previous_close_update.isoformat()
-            
+
         await self._store.async_save(payload)
 
     def _get_active_yahoo_symbols(self, us_only=False) -> list[str]:
@@ -433,6 +450,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             if stored_data:
                 self.fundamentals_cache = stored_data.get("fundamentals_data", {})
                 self.previous_close_cache = stored_data.get("previous_close_data", {})
+                self.sync_paused = stored_data.get("sync_paused", False)
 
                 f_up = stored_data.get("last_fundamentals_update")
                 if f_up: self.last_fundamentals_update = dt_util.parse_datetime(f_up)

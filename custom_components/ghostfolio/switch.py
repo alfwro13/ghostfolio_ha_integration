@@ -51,13 +51,10 @@ class GhostfolioPauseSyncSwitch(CoordinatorEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs) -> None:
         """Pause the sync."""
-        self.coordinator.sync_paused = True
+        await self.coordinator.async_set_sync_paused(True)
         self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs) -> None:
         """Resume the sync and immediately fetch fresh data."""
-        self.coordinator.sync_paused = False
+        await self.coordinator.async_set_sync_paused(False)
         self.async_write_ha_state()
-        
-        # Force a fresh update right now so you don't have to wait for the next 1-minute interval
-        await self.coordinator.async_request_refresh()
