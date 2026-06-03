@@ -103,9 +103,9 @@
       }
     },
     "button": {
-      "prune_orphans": {
-        "name": "Verwaiste Entitäten bereinigen"
-      }
+      "prune_orphans": { "name": "Verwaiste Entitäten bereinigen" },
+      "clear_watchlist_high_limits": { "name": "Watchlist-Obergrenzen zurücksetzen" },
+      "clear_watchlist_low_limits": { "name": "Watchlist-Untergrenzen zurücksetzen" }
     }
   }
 }

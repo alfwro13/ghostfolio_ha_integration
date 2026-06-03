@@ -41,6 +41,8 @@ async def async_setup_entry(
     @callback
     def _update_numbers():
         """Check for new holdings/watchlist items and create limit numbers."""
+        if not coordinator.data:
+            return
         new_entities = []
         
         # 1. Process Holdings
@@ -143,7 +145,11 @@ class GhostfolioLimitNumber(CoordinatorEntity, RestoreNumber):
         
         # Entity Name: "AAPL - Low Limit"
         self._attr_name = f"{symbol} - {limit_type.capitalize()} Limit"
-        
+
+        # Watchlist high-limit entities are disabled by default to reduce clutter
+        if account_id == "watchlist_scope" and limit_type == "high":
+            self._attr_entity_registry_enabled_default = False
+
         self._attr_native_value = None
         
         self.portfolio_name = config_entry.data.get(CONF_PORTFOLIO_NAME, "Ghostfolio")

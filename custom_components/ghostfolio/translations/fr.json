@@ -103,9 +103,9 @@
       }
     },
     "button": {
-      "prune_orphans": {
-        "name": "Nettoyer les entités orphelines"
-      }
+      "prune_orphans": { "name": "Nettoyer les entités orphelines" },
+      "clear_watchlist_high_limits": { "name": "Effacer les limites hautes de la liste de surveillance" },
+      "clear_watchlist_low_limits": { "name": "Effacer les limites basses de la liste de surveillance" }
     }
   }
 }

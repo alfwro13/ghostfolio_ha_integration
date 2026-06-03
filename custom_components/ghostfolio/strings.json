@@ -86,7 +86,9 @@
       }
     },
     "button": {
-      "prune_orphans": { "name": "Prune Orphaned Entities" }
+      "prune_orphans": { "name": "Prune Orphaned Entities" },
+      "clear_watchlist_high_limits": { "name": "Clear Watchlist High Limits" },
+      "clear_watchlist_low_limits": { "name": "Clear Watchlist Low Limits" }
     }
   }
 }
