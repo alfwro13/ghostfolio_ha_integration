@@ -30,6 +30,7 @@ from .const import (
     YAHOO_CRUMB_URL,
     YAHOO_QUOTE_URL,
     YAHOO_QUOTE_SUMMARY_URL,
+    YAHOO_REQUEST_DELAY,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -317,7 +318,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 except Exception as e:
                     _LOGGER.debug("Failed to fetch previous close for %s: %s", ticker, e)
                     
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(YAHOO_REQUEST_DELAY)
                 
             self.last_previous_close_update = dt_util.utcnow()
             await self._save_cache()
@@ -351,7 +352,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 except Exception as e:
                     _LOGGER.debug("Failed to fetch fundamentals for %s: %s", ticker, e)
                     
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(YAHOO_REQUEST_DELAY)
                 
             self.last_fundamentals_update = dt_util.utcnow()
             await self._save_cache()

@@ -21,6 +21,7 @@ from .const import (
     CONF_SHOW_HOLDINGS,
     CONF_SHOW_WATCHLIST,
     DOMAIN,
+    PRICE_LIMIT_MAX,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -119,7 +120,7 @@ class GhostfolioLimitNumber(CoordinatorEntity, RestoreNumber):
     
     # --- RANGE CONFIGURATION ---
     _attr_native_min_value = 0
-    _attr_native_max_value = 900000
+    _attr_native_max_value = PRICE_LIMIT_MAX
     _attr_native_step = 0.01
     # ---------------------------
 

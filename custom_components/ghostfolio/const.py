@@ -18,6 +18,12 @@ CONF_SHOW_FUNDAMENTALS = "show_fundamentals"
 DEFAULT_NAME = "Ghostfolio"
 DEFAULT_UPDATE_INTERVAL = 15  # minutes
 
+# Price limit number entity configuration
+PRICE_LIMIT_MAX = 900_000
+
+# Delay between sequential Yahoo Finance API requests to avoid rate limiting (seconds)
+YAHOO_REQUEST_DELAY = 0.5
+
 # Yahoo Finance direct API
 YAHOO_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 YAHOO_SESSION_URL = "https://fc.yahoo.com"
