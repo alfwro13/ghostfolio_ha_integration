@@ -12,6 +12,7 @@
           "show_accounts": "Afficher les comptes individuels",
           "show_holdings": "Afficher les actifs (Un capteur par actif)",
           "show_watchlist": "Afficher la liste de surveillance",
+          "show_fundamentals": "Afficher les métriques fondamentales (Yahoo Finance - Quotidien)",
           "verify_ssl": "Vérifier le certificat SSL",
           "update_interval": "Intervalle de mise à jour"
         },
@@ -23,6 +24,7 @@
           "show_accounts": "Créer des capteurs pour chaque compte individuel trouvé dans Ghostfolio",
           "show_holdings": "Créer des capteurs individuels pour chaque action/actif, groupés par compte",
           "show_watchlist": "Créer des capteurs pour les éléments de votre liste de surveillance Ghostfolio",
+          "show_fundamentals": "Récupérer des métriques détaillées (PEG, marges, flux de trésorerie) directement depuis Yahoo Finance pour tous les actifs et éléments de la liste de surveillance.",
           "verify_ssl": "Désactivez ceci si vous utilisez des proxys d'entreprise comme Zscaler qui interceptent les certificats SSL",
           "update_interval": "Fréquence de mise à jour des données de portefeuille (en minutes, min: 1, max: 1440)"
         }
@@ -38,6 +40,7 @@
           "show_accounts": "Afficher les comptes individuels",
           "show_holdings": "Afficher les actifs (Un capteur par actif)",
           "show_watchlist": "Afficher la liste de surveillance",
+          "show_fundamentals": "Afficher les métriques fondamentales (Yahoo Finance - Quotidien)",
           "verify_ssl": "Vérifier le certificat SSL",
           "update_interval": "Intervalle de mise à jour"
         },
@@ -49,6 +52,7 @@
           "show_accounts": "Créer des capteurs pour chaque compte individuel trouvé dans Ghostfolio",
           "show_holdings": "Créer des capteurs individuels pour chaque action/actif, groupés par compte",
           "show_watchlist": "Créer des capteurs pour les éléments de votre liste de surveillance Ghostfolio",
+          "show_fundamentals": "Récupérer des métriques détaillées (PEG, marges, flux de trésorerie) directement depuis Yahoo Finance pour tous les actifs et éléments de la liste de surveillance.",
           "verify_ssl": "Désactivez ceci si vous utilisez des proxys d'entreprise comme Zscaler qui interceptent les certificats SSL",
           "update_interval": "Fréquence de mise à jour des données de portefeuille (en minutes, min: 1, max: 1440)"
         }

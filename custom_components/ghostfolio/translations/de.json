@@ -12,6 +12,7 @@
           "show_accounts": "Einzelne Konten anzeigen",
           "show_holdings": "Bestände anzeigen (Ein Sensor pro Asset)",
           "show_watchlist": "Watchlist anzeigen",
+          "show_fundamentals": "Grundlagen anzeigen (Yahoo Finance - Täglich)",
           "verify_ssl": "SSL-Zertifikat verifizieren",
           "update_interval": "Aktualisierungsintervall"
         },
@@ -23,6 +24,7 @@
           "show_accounts": "Sensoren für jedes in Ghostfolio gefundene Konto erstellen",
           "show_holdings": "Einzelne Sensoren für jede Aktie/Anlage erstellen, gruppiert nach Konto",
           "show_watchlist": "Sensoren für Einträge in Ihrer Ghostfolio-Watchlist erstellen",
+          "show_fundamentals": "Detaillierte Kennzahlen (PEG, Margen, Cashflow) direkt von Yahoo Finance für alle Bestände und Watchlist-Einträge abrufen.",
           "verify_ssl": "Deaktivieren Sie dies, wenn Sie Unternehmens-Proxys wie Zscaler verwenden, die SSL-Zertifikate abfangen",
           "update_interval": "Wie oft Portfolio-Daten aktualisiert werden sollen (in Minuten, min: 1, max: 1440)"
         }
@@ -38,6 +40,7 @@
           "show_accounts": "Einzelne Konten anzeigen",
           "show_holdings": "Bestände anzeigen (Ein Sensor pro Asset)",
           "show_watchlist": "Watchlist anzeigen",
+          "show_fundamentals": "Grundlagen anzeigen (Yahoo Finance - Täglich)",
           "verify_ssl": "SSL-Zertifikat verifizieren",
           "update_interval": "Aktualisierungsintervall"
         },
@@ -49,6 +52,7 @@
           "show_accounts": "Sensoren für jedes in Ghostfolio gefundene Konto erstellen",
           "show_holdings": "Einzelne Sensoren für jede Aktie/Anlage erstellen, gruppiert nach Konto",
           "show_watchlist": "Sensoren für Einträge in Ihrer Ghostfolio-Watchlist erstellen",
+          "show_fundamentals": "Detaillierte Kennzahlen (PEG, Margen, Cashflow) direkt von Yahoo Finance für alle Bestände und Watchlist-Einträge abrufen.",
           "verify_ssl": "Deaktivieren Sie dies, wenn Sie Unternehmens-Proxys wie Zscaler verwenden, die SSL-Zertifikate abfangen",
           "update_interval": "Wie oft Portfolio-Daten aktualisiert werden sollen (in Minuten, min: 1, max: 1440)"
         }
