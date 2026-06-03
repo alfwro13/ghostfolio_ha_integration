@@ -67,6 +67,8 @@ async def async_setup_entry(
     @callback
     def _update_sensors():
         """Dynamically add or update sensors when data changes."""
+        if not coordinator.data:
+            return
         new_entities = []
         accounts_data = coordinator.data.get("accounts", {}).get("accounts", [])
 
