@@ -60,7 +60,8 @@
     },
     "error": {
       "cannot_connect": "Verbindung zu Ghostfolio fehlgeschlagen",
-      "auth_failed": "Authentifizierung fehlgeschlagen. Bitte überprüfen Sie Ihren Zugangstoken."
+      "auth_failed": "Authentifizierung fehlgeschlagen. Bitte überprüfen Sie Ihren Zugangstoken.",
+      "invalid_url": "Die Basis-URL muss mit http:// oder https:// beginnen"
     },
     "abort": {
       "already_configured": "Ghostfolio-Instanz ist bereits konfiguriert",

@@ -49,31 +49,34 @@ class GhostfolioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            api = GhostfolioAPI(
-                base_url=user_input[CONF_BASE_URL],
-                access_token=user_input[CONF_ACCESS_TOKEN],
-                verify_ssl=user_input.get(CONF_VERIFY_SSL, True),
-            )
+            if not user_input[CONF_BASE_URL].startswith(("http://", "https://")):
+                errors["base_url"] = "invalid_url"
+            else:
+                api = GhostfolioAPI(
+                    base_url=user_input[CONF_BASE_URL],
+                    access_token=user_input[CONF_ACCESS_TOKEN],
+                    verify_ssl=user_input.get(CONF_VERIFY_SSL, True),
+                )
 
-            try:
-                auth_token = await api.authenticate()
-                if auth_token:
-                    await api.get_portfolio_performance()
-                    
-                    portfolio_name = user_input.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
-                    unique_id = f"{user_input[CONF_BASE_URL]}_{portfolio_name}".replace(" ", "_").lower()
-                    await self.async_set_unique_id(unique_id)
-                    self._abort_if_unique_id_configured()
+                try:
+                    auth_token = await api.authenticate()
+                    if auth_token:
+                        await api.get_portfolio_performance()
 
-                    return self.async_create_entry(
-                        title=user_input[CONF_PORTFOLIO_NAME],
-                        data=user_input,
-                    )
-                else:
-                    errors["base"] = "auth_failed"
-            except Exception as ex:
-                _LOGGER.exception("Unexpected exception: %s", ex)
-                errors["base"] = "cannot_connect"
+                        portfolio_name = user_input.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
+                        unique_id = f"{user_input[CONF_BASE_URL]}_{portfolio_name}".replace(" ", "_").lower()
+                        await self.async_set_unique_id(unique_id)
+                        self._abort_if_unique_id_configured()
+
+                        return self.async_create_entry(
+                            title=user_input[CONF_PORTFOLIO_NAME],
+                            data=user_input,
+                        )
+                    else:
+                        errors["base"] = "auth_failed"
+                except Exception as ex:
+                    _LOGGER.exception("Unexpected exception: %s", ex)
+                    errors["base"] = "cannot_connect"
 
         return self.async_show_form(
             step_id="user",
@@ -116,31 +119,34 @@ class GhostfolioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            api = GhostfolioAPI(
-                base_url=user_input[CONF_BASE_URL],
-                access_token=user_input[CONF_ACCESS_TOKEN],
-                verify_ssl=user_input.get(CONF_VERIFY_SSL, True),
-            )
+            if not user_input[CONF_BASE_URL].startswith(("http://", "https://")):
+                errors["base_url"] = "invalid_url"
+            else:
+                api = GhostfolioAPI(
+                    base_url=user_input[CONF_BASE_URL],
+                    access_token=user_input[CONF_ACCESS_TOKEN],
+                    verify_ssl=user_input.get(CONF_VERIFY_SSL, True),
+                )
 
-            try:
-                auth_token = await api.authenticate()
-                if auth_token:
-                    await api.get_portfolio_performance()
-                    
-                    portfolio_name = user_input.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
-                    unique_id = f"{user_input[CONF_BASE_URL]}_{portfolio_name}".replace(" ", "_").lower()
-                    await self.async_set_unique_id(unique_id)
-                    self._abort_if_unique_id_mismatch(reason="wrong_account")
+                try:
+                    auth_token = await api.authenticate()
+                    if auth_token:
+                        await api.get_portfolio_performance()
 
-                    return self.async_update_reload_and_abort(
-                        config_entry,
-                        data_updates=user_input,
-                    )
-                else:
-                    errors["base"] = "auth_failed"
-            except Exception as ex:
-                _LOGGER.exception("Unexpected exception during reconfiguration: %s", ex)
-                errors["base"] = "cannot_connect"
+                        portfolio_name = user_input.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
+                        unique_id = f"{user_input[CONF_BASE_URL]}_{portfolio_name}".replace(" ", "_").lower()
+                        await self.async_set_unique_id(unique_id)
+                        self._abort_if_unique_id_mismatch(reason="wrong_account")
+
+                        return self.async_update_reload_and_abort(
+                            config_entry,
+                            data_updates=user_input,
+                        )
+                    else:
+                        errors["base"] = "auth_failed"
+                except Exception as ex:
+                    _LOGGER.exception("Unexpected exception during reconfiguration: %s", ex)
+                    errors["base"] = "cannot_connect"
 
         current_data = config_entry.data
         return self.async_show_form(

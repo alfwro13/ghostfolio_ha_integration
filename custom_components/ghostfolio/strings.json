@@ -60,7 +60,8 @@
     },
     "error": {
       "cannot_connect": "Failed to connect to Ghostfolio",
-      "auth_failed": "Authentication failed. Please check your access token."
+      "auth_failed": "Authentication failed. Please check your access token.",
+      "invalid_url": "Base URL must start with http:// or https://"
     },
     "abort": {
       "already_configured": "Ghostfolio instance is already configured",
