@@ -32,6 +32,7 @@ class GhostfolioPruneButton(CoordinatorEntity, ButtonEntity):
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_translation_key = "prune_orphans"
+    _attr_icon = "mdi:broom"
 
     def __init__(self, coordinator: GhostfolioDataUpdateCoordinator, config_entry: ConfigEntry):
         """Initialize the button."""
