@@ -114,7 +114,7 @@ class GhostfolioAPI:
                     "is_active": response.status == 200
                 }
         except Exception as e:
-            _LOGGER.debug(f"Health check failed for {provider_code}: {e}")
+            _LOGGER.debug("Health check failed for %s: %s", provider_code, e)
             return {
                 "code": provider_code,
                 "status_code": 0,

@@ -1208,7 +1208,7 @@ def _calculate_lynch_peg(data):
             if denominator > 0:
                 return round(fwd_pe / denominator, 2)
     except Exception as e:
-        _LOGGER.debug(f"Error calculating Lynch PEG: {e}")
+        _LOGGER.debug("Error calculating Lynch PEG: %s", e)
         
     return None
 

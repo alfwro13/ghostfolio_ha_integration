@@ -4,12 +4,11 @@ from __future__ import annotations
 import logging
 import asyncio
 from datetime import timedelta
-from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
@@ -51,7 +50,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # --- Register Custom Services for Manual Fetches ---
-    async def refresh_fundamentals(call):
+    async def refresh_fundamentals(_):
         for e in hass.config_entries.async_entries(DOMAIN):
             if hasattr(e, "runtime_data"):
                 coord = e.runtime_data
@@ -62,7 +61,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     except Exception as err:
                         _LOGGER.error("Failed to refresh fundamentals for %s: %s", e.title, err)
 
-    async def fetch_24h_change(call):
+    async def fetch_24h_change(_):
         for e in hass.config_entries.async_entries(DOMAIN):
             if hasattr(e, "runtime_data"):
                 coord = e.runtime_data
@@ -73,7 +72,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     except Exception as err:
                         _LOGGER.error("Failed to fetch 24h change for %s: %s", e.title, err)
 
-    async def fetch_premarket_data(call):
+    async def fetch_premarket_data(_):
         for e in hass.config_entries.async_entries(DOMAIN):
             if hasattr(e, "runtime_data"):
                 coord = e.runtime_data
@@ -156,7 +155,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                     self._yahoo_crumb = await resp.text()
                     return self._yahoo_crumb
         except Exception as e:
-            _LOGGER.debug(f"Yahoo crumb fetch failed: {e}")
+            _LOGGER.debug("Yahoo crumb fetch failed: %s", e)
         return None
 
     def _schedule_refresh(self) -> None:
@@ -231,7 +230,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                         state = res[0].get("marketState", "")
                         return state == "REGULAR"
         except Exception as e:
-            _LOGGER.debug(f"Failed to check US market state: {e}")
+            _LOGGER.debug("Failed to check US market state: %s", e)
         return None
 
     async def async_fetch_premarket(self):
@@ -281,7 +280,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                         if price is not None and sym:
                             self.premarket_cache[sym] = float(price)
         except Exception as e:
-            _LOGGER.error(f"Failed pre-market fetch process: {e}")
+            _LOGGER.error("Failed pre-market fetch process: %s", e)
 
     async def async_fetch_24h_change(self):
         """Manually fetch previous close using sequential API calls."""
@@ -311,14 +310,14 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                                 if prev_close is not None:
                                     self.previous_close_cache[ticker] = prev_close
                 except Exception as e:
-                    _LOGGER.debug(f"Failed to fetch previous close for {ticker}: {e}")
+                    _LOGGER.debug("Failed to fetch previous close for %s: %s", ticker, e)
                     
                 await asyncio.sleep(0.5)
                 
             self.last_previous_close_update = dt_util.utcnow()
             await self._save_cache()
         except Exception as e:
-            _LOGGER.error(f"Failed 24h change fetch process: {e}")
+            _LOGGER.error("Failed 24h change fetch process: %s", e)
 
     async def async_fetch_fundamentals(self):
         """Manually fetch deep fundamentals using sequential API calls."""
@@ -345,14 +344,14 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                             if res:
                                 self.fundamentals_cache[ticker] = res[0]
                 except Exception as e:
-                    _LOGGER.debug(f"Failed to fetch fundamentals for {ticker}: {e}")
+                    _LOGGER.debug("Failed to fetch fundamentals for %s: %s", ticker, e)
                     
                 await asyncio.sleep(0.5)
                 
             self.last_fundamentals_update = dt_util.utcnow()
             await self._save_cache()
         except Exception as e:
-            _LOGGER.error(f"Failed fundamentals fetch process: {e}")
+            _LOGGER.error("Failed fundamentals fetch process: %s", e)
 
     async def _enrich_item_with_market_data(self, item: dict) -> dict:
         """Enrich an asset or watchlist item."""
@@ -434,7 +433,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                     item["assetClass"] = profile.get("assetClass")
                     
             except Exception as err:
-                _LOGGER.debug(f"Failed to enrich item {symbol}: {err}")
+                _LOGGER.debug("Failed to enrich item %s: %s", symbol, err)
                 
         return item
 
@@ -571,7 +570,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                     self.dividends_cache = dividend_data
                     self.last_dividends_update = now
                 except Exception as e:
-                    _LOGGER.error(f"Failed to fetch activities for dividends: {e}")
+                    _LOGGER.error("Failed to fetch activities for dividends: %s", e)
 
             data["dividends"] = self.dividends_cache
 
@@ -626,7 +625,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             return data
 
         except Exception as err:
-            _LOGGER.warning(f"Ghostfolio API update failed: {err}")
+            _LOGGER.warning("Ghostfolio API update failed: %s", err)
             return data
 
     async def async_prune_orphans(self) -> None:
