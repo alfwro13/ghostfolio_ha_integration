@@ -99,6 +99,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         await entry.runtime_data.api.close()
+        remaining = [
+            e for e in hass.config_entries.async_entries(DOMAIN)
+            if e.entry_id != entry.entry_id
+        ]
+        if not remaining:
+            hass.services.async_remove(DOMAIN, "refresh_fundamentals")
+            hass.services.async_remove(DOMAIN, "fetch_24h_change")
+            hass.services.async_remove(DOMAIN, "fetch_premarket_data")
     return unloaded
 
 
