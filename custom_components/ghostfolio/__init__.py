@@ -558,6 +558,15 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for account_id, raw_holdings in raw_account_holdings.items():
                 enriched_holdings = []
                 for h in raw_holdings:
+                    # --- FIX FOR GHOSTFOLIO 3.7.0 ---
+                    # Restore removed attributes from the nested SymbolProfile
+                    if "SymbolProfile" in h:
+                        sp = h["SymbolProfile"]
+                        for attr in ["symbol", "dataSource", "currency", "assetClass", "name", "assetSubClass"]:
+                            if not h.get(attr) and sp.get(attr):
+                                h[attr] = sp.get(attr)
+                    # --------------------------------
+
                     if float(h.get("quantity") or 0) > 0:
                         # Only enrich non-cash assets to save API calls
                         if h.get("assetClass") == "LIQUIDITY":
@@ -568,6 +577,13 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
 
             watchlist_items = []
             for w in raw_watchlist_items:
+                # --- FIX FOR GHOSTFOLIO 3.7.0 ---
+                if "SymbolProfile" in w:
+                    sp = w["SymbolProfile"]
+                    for attr in ["symbol", "dataSource", "currency", "assetClass", "name", "assetSubClass"]:
+                        if not w.get(attr) and sp.get(attr):
+                            w[attr] = sp.get(attr)
+                # --------------------------------
                 watchlist_items.append(await self._enrich_item_with_market_data(w))
 
             data["server_online"] = True
