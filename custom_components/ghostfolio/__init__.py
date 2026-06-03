@@ -56,24 +56,33 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if hasattr(e, "runtime_data"):
                 coord = e.runtime_data
                 if isinstance(coord, GhostfolioDataUpdateCoordinator):
-                    await coord.async_fetch_fundamentals()
-                    await coord.async_request_refresh()
+                    try:
+                        await coord.async_fetch_fundamentals()
+                        await coord.async_request_refresh()
+                    except Exception as err:
+                        _LOGGER.error("Failed to refresh fundamentals for %s: %s", e.title, err)
 
     async def fetch_24h_change(call):
         for e in hass.config_entries.async_entries(DOMAIN):
             if hasattr(e, "runtime_data"):
                 coord = e.runtime_data
                 if isinstance(coord, GhostfolioDataUpdateCoordinator):
-                    await coord.async_fetch_24h_change()
-                    await coord.async_request_refresh()
+                    try:
+                        await coord.async_fetch_24h_change()
+                        await coord.async_request_refresh()
+                    except Exception as err:
+                        _LOGGER.error("Failed to fetch 24h change for %s: %s", e.title, err)
 
     async def fetch_premarket_data(call):
         for e in hass.config_entries.async_entries(DOMAIN):
             if hasattr(e, "runtime_data"):
                 coord = e.runtime_data
                 if isinstance(coord, GhostfolioDataUpdateCoordinator):
-                    await coord.async_fetch_premarket()
-                    await coord.async_request_refresh()
+                    try:
+                        await coord.async_fetch_premarket()
+                        await coord.async_request_refresh()
+                    except Exception as err:
+                        _LOGGER.error("Failed to fetch premarket data for %s: %s", e.title, err)
 
     if not hass.services.has_service(DOMAIN, "refresh_fundamentals"):
         hass.services.async_register(DOMAIN, "refresh_fundamentals", refresh_fundamentals)
