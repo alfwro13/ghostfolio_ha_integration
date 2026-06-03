@@ -963,7 +963,11 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
 
         dividends_map = self.coordinator.data.get("dividends", {})
         account_dividends = dividends_map.get(self.account_id, {})
-        accumulated_dividends = account_dividends.get(self.symbol.upper(), 0.0)
+        
+        # DEFENSIVE CHECK
+        accumulated_dividends = 0.0
+        if self.symbol:
+            accumulated_dividends = account_dividends.get(self.symbol.upper(), 0.0)
 
         return {
             "ticker": self.symbol,
