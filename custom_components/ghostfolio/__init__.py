@@ -431,10 +431,10 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         if not self._cache_loaded:
             stored_data = await self._store.async_load()
             if stored_data:
-                self.fundamentals_cache = stored_data.get("fundamentals_data", stored_data.get("data", {}))
+                self.fundamentals_cache = stored_data.get("fundamentals_data", {})
                 self.previous_close_cache = stored_data.get("previous_close_data", {})
-                
-                f_up = stored_data.get("last_fundamentals_update", stored_data.get("last_update"))
+
+                f_up = stored_data.get("last_fundamentals_update")
                 if f_up: self.last_fundamentals_update = dt_util.parse_datetime(f_up)
                     
                 p_up = stored_data.get("last_previous_close_update")
