@@ -88,6 +88,8 @@
       }
     },
     "binary_sensor": {
+      "server": { "name": "Server" },
+      "us_market": { "name": "US-Markt" },
       "data_provider": {
         "state": {
           "on": "Verfügbar",

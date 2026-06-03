@@ -78,6 +78,8 @@
       "simple_gain_percentage": { "name": "Simple Gain %" }
     },
     "binary_sensor": {
+      "server": { "name": "Server" },
+      "us_market": { "name": "US Market" },
       "data_provider": {
         "state": { "on": "Available", "off": "Unavailable" }
       }

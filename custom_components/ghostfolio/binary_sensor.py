@@ -41,7 +41,7 @@ class GhostfolioServerSensor(CoordinatorEntity, BinarySensorEntity):
     """Sensor to check if Ghostfolio Server is reachable."""
 
     _attr_has_entity_name = True
-    _attr_name = "Server"  # Will display as "Ghostfolio Server" in standard contexts
+    _attr_translation_key = "server"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -70,7 +70,7 @@ class GhostfolioUSMarketSensor(CoordinatorEntity, BinarySensorEntity):
     """Sensor to track if the US Market is currently open."""
 
     _attr_has_entity_name = True
-    _attr_name = "US Market"
+    _attr_translation_key = "us_market"
     _attr_icon = "mdi:store"
     _attr_device_class = BinarySensorDeviceClass.WINDOW # 'on' = Open, 'off' = Closed
 
