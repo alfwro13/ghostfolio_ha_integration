@@ -18,7 +18,7 @@ This integration automatically detects your portfolio's base currency and offers
 - **Dividend Tracking:** Monitor total accumulated dividends at the global, account, and individual holding levels.
 - **Fundamental Metrics:** Deep integration with Yahoo Finance to pull fundamental metrics (PEG, Margins, Valuation) for your assets.
 - **Price Alerts:** Configurable High/Low limit numbers for every asset to trigger automations.
-- **Diagnostic Sensors:** Monitor the connection status of your Ghostfolio server and its data providers.
+- **Diagnostic Sensors:** Monitor the connection status of your Ghostfolio server, data providers, and US market state.
 - **Smart Health Checks:** Automatically detects if a data provider (e.g., Yahoo Finance) is down and marks affected sensors as `Unknown` instead of reporting erroneous zero values.
 - **Entity Cleanup:** Built-in tool to remove old or sold assets from Home Assistant.
 
@@ -56,13 +56,26 @@ Dedicated sensors are created for every individual asset in your portfolio. *(No
 - **Sensor State**: The total live market value of the holding in your base currency (`Quantity * Live Price`).
 - **Friendly Name**: The ticker symbol (e.g., "AAPL", "VWRL.AS").
 - **Attributes**:
-  - `market_price`: The live price fetched via Ghostfolio market-data or overridden by the integration's live Yahoo Finance pre-market fetch.
-  - `average_buy_price`: Calculated as `investment / quantity`.
+  - `ticker`: The asset symbol.
+  - `account`: The account this holding belongs to.
   - `number_of_shares`: Mapped to the holding's `quantity`.
-  - `gain_value`: Calculated as `(Current Live Value) - (Total Investment Cost)`.
+  - `currency_asset`: The native currency of the asset (e.g., `USD`, `GBP`).
+  - `currency_base`: Your portfolio base currency.
+  - `market_price`: The live price fetched via Ghostfolio market-data or overridden by the integration's live Yahoo Finance pre-market fetch.
+  - `market_price_currency`: The currency of the market price.
+  - `market_price_in_base_currency`: Market price converted to your base currency.
+  - `average_buy_price`: Calculated as `investment / quantity`, in base currency.
+  - `average_buy_price_currency`: Currency of the average buy price.
+  - `gain_value`: Calculated as `(Current Live Value) - (Total Investment Cost)`, in base currency.
+  - `gain_value_currency`: Currency of the gain value.
   - `gain_pct`: Calculated as `(gain_value / Total Investment Cost) * 100`.
   - `trend_vs_buy`: Reports `up`, `down`, or `break_even` based on whether the current market price is higher or lower than your average buy price.
   - `accumulated_dividends`: Filters the global activities endpoint for `DIVIDEND` transactions specifically matching this ticker and account.
+  - `accumulated_dividends_currency`: Currency of accumulated dividends.
+  - `asset_class`: The asset class as reported by Ghostfolio (e.g., `EQUITY`, `CRYPTOCURRENCY`).
+  - `data_source`: The data provider used for this holding (e.g., `YAHOO`).
+  - `market_change_24h`: Absolute price change over the last 24 hours.
+  - `market_change_pct_24h`: Percentage price change over the last 24 hours.
   - `low_limit_set` / `low_limit_reached`: Linked to the Number Entity limit helpers.
   - `high_limit_set` / `high_limit_reached`: Linked to the Number Entity limit helpers.
 
@@ -93,6 +106,8 @@ For every Holding and Watchlist item, the integration creates two **Number** ent
 - **[Ticker] - Low Limit**
 - **[Ticker] - High Limit**
 
+> **Note:** Watchlist High Limit entities are **disabled by default** to reduce clutter. Enable them individually in the Home Assistant entity registry if needed. You can also use the **Disable Watchlist High/Low Limits** diagnostic buttons (see section 8) to bulk-disable them again at any time.
+
 When you set a value in these number entities, the corresponding main Sensor (Holding or Watchlist) immediately updates its attributes:
 - **`low_limit_set` / `high_limit_set`**: Displays the limit value you set (or `false` if not set).
 - **`low_limit_reached`**: Becomes `true` if the value drops to or below your limit.
@@ -113,14 +128,18 @@ This integration features a built-in event system to handle price alerts efficie
 - current_value: The price that triggered the alert
 - currency: The currency code (e.g., "USD", "GBP")
 
-### 7. Diagnostic Sensors & Tools
+### 8. Diagnostic Sensors & Tools
 To help you troubleshoot issues and maintain your setup, the integration provides diagnostic entities. You can find these on the main Portfolio Device page in Home Assistant.
 
-- **Ghostfolio Server**: Indicates if your Ghostfolio instance is reachable (`Connected` / `Disconnected`).
-- **Data Provider Status**: Individual sensors for each data provider (e.g., `Yahoo Status`, `Coingecko Status`) showing if they are `Available` or `Unavailable`.
-- **Prune Orphaned Entities**: A button that, when pressed, scans your Home Assistant registry and removes any Ghostfolio entities (such as sold assets or removed watchlist items) that are no longer returned by the API.
+- **Ghostfolio Server**: Binary sensor indicating if your Ghostfolio instance is reachable (`Connected` / `Disconnected`).
+- **US Market**: Binary sensor showing whether the US stock market is currently open or closed. Used internally to control pre-market data fetching.
+- **Data Provider Status**: Individual binary sensors for each data provider (e.g., `Yahoo Status`, `Coingecko Status`) showing if they are `Available` or `Unavailable`.
+- **Prune Orphaned Entities**: A button that scans your Home Assistant registry and removes any Ghostfolio entities (such as sold assets or removed watchlist items) that are no longer returned by the API.
+- **Disable Watchlist High Limits**: A button that disables all currently-enabled watchlist high limit number entities in the entity registry in one click.
+- **Disable Watchlist Low Limits**: A button that disables all currently-enabled watchlist low limit number entities in the entity registry in one click.
+- **Pause Sync**: A switch that pauses all polling from Ghostfolio. When paused, the coordinator's update timer is cancelled and no API calls are made. The paused state is persisted across Home Assistant restarts. Toggle it back off to immediately resume syncing.
 
-### 8. Manual Services & Pre-Market Data
+### 9. Manual Services & Pre-Market Data
 
 This integration exposes specific services to Home Assistant, allowing you to manually trigger data refreshes or fetch extended-hours market data.
 
@@ -130,7 +149,7 @@ This integration exposes specific services to Home Assistant, allowing you to ma
 
 [**Example Automation (Pre-Market Fetch)**](assets/automation_pre_market_fetch.md)
 
-### 9. Dashboards
+### 10. Dashboards
 
 [I documented my watchlist dashboard setup here](assets/watchlist_dashboard.md)
 
@@ -168,12 +187,16 @@ You can modify that code and use the holding sensors created by this integration
 1. Go to **Settings → Devices & Services**.
 2. Click **Add Integration** and search for **"Ghostfolio"**.
 3. Enter your details and choose which sensors to create:
-   - **Base URL**: The URL of your Ghostfolio instance (e.g., `https://your-ghostfolio.com`).
+   - **Portfolio Name**: A friendly name for this portfolio instance.
+   - **Base URL**: The URL of your Ghostfolio instance (e.g., `https://your-ghostfolio.com`). Must start with `http://` or `https://`.
    - **Access Token**: Your Ghostfolio access token.
-   - **Show Portfolio Totals**: (Optional) Check to create global portfolio sensors.
-   - **Show Individual Accounts**: (Optional) Check to create sensors for each account.
-   - **Show Holdings**: (Optional) Check to create sensors and limit numbers for individual assets.
-   - **Show Watchlist Items**: (Optional) Check to create sensors and limit numbers for watchlist items.
+   - **Show Portfolio Totals**: (Optional) Create global portfolio sensors.
+   - **Show Individual Accounts**: (Optional) Create sensors for each account.
+   - **Show Holdings**: (Optional) Create sensors and limit numbers for individual assets.
+   - **Show Watchlist Items**: (Optional) Create sensors and limit numbers for watchlist items.
+   - **Show Fundamentals**: (Optional) Pull deep fundamental metrics from Yahoo Finance daily. Creates one sensor per tracked symbol.
+   - **Verify SSL Certificate**: Disable if you use a corporate proxy (e.g., Zscaler) that intercepts SSL certificates.
+   - **Update Interval**: How often to poll Ghostfolio for updates (in minutes, default: 15, range: 1–1440).
 
 
 ## API Endpoints Used
