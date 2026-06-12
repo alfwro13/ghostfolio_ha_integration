@@ -111,7 +111,7 @@ async def async_setup_entry(
                             continue
                             
                         symbol = holding.get("symbol")
-                        safe_symbol = slugify(symbol)
+                        safe_symbol = slugify(symbol) if symbol else "unknown"
                         unique_id = f"ghostfolio_holding_{account_id}_{safe_symbol}_{config_entry.entry_id}"
                         
                         if unique_id not in known_ids:
@@ -127,7 +127,7 @@ async def async_setup_entry(
             watchlist_items = coordinator.data.get("watchlist", [])
             for item in watchlist_items:
                 symbol = item.get("symbol")
-                safe_symbol = slugify(symbol)
+                safe_symbol = slugify(symbol) if symbol else "unknown"
                 unique_id = f"ghostfolio_watchlist_{safe_symbol}_{config_entry.entry_id}"
                 
                 if unique_id not in known_ids:
@@ -138,7 +138,7 @@ async def async_setup_entry(
         if show_fundamentals:
             fund_payload = coordinator.data.get("fundamentals_data", {})
             for symbol in fund_payload.keys():
-                safe_symbol = slugify(symbol)
+                safe_symbol = slugify(symbol) if symbol else "unknown"
                 fund_id = f"ghostfolio_fundamentals_{safe_symbol}_{config_entry.entry_id}"
                 
                 if fund_id not in known_ids:

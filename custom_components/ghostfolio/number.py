@@ -68,7 +68,7 @@ async def async_setup_entry(
                         
                         # Create Low and High limit entities
                         for limit_type in ["low", "high"]:
-                            unique_id = f"ghostfolio_limit_{limit_type}_{account_id}_{slugify(symbol)}_{config_entry.entry_id}"
+                            unique_id = f"ghostfolio_limit_{limit_type}_{account_id}_{slugify(symbol) if symbol else 'unknown'}_{config_entry.entry_id}"
                             
                             if unique_id not in known_ids:
                                 new_entities.append(
@@ -90,7 +90,7 @@ async def async_setup_entry(
             for item in watchlist_items:
                 symbol = item.get("symbol")
                 for limit_type in ["low", "high"]:
-                    unique_id = f"ghostfolio_watchlist_limit_{limit_type}_{slugify(symbol)}_{config_entry.entry_id}"
+                    unique_id = f"ghostfolio_watchlist_limit_{limit_type}_{slugify(symbol) if symbol else 'unknown'}_{config_entry.entry_id}"
                     
                     if unique_id not in known_ids:
                         new_entities.append(
