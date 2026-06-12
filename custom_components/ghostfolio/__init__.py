@@ -435,22 +435,26 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                 if premarket_price is not None and float(premarket_price) > 0 and float(premarket_price) != real_time_price:
                     premarket_price = float(premarket_price)
                     quantity = float(item.get("quantity") or 0)
-                    original_value_base = float(item.get("valueInBaseCurrency") or item.get("value") or 0)
-                    
-                    if real_time_price > 0 and quantity > 0:
-                        implied_fx_rate = original_value_base / (real_time_price * quantity)
-                        new_value_asset_currency = premarket_price * quantity
-                        new_value_base_currency = new_value_asset_currency * implied_fx_rate
-                        
+
+                    if quantity > 0:
+                        original_value_base = float(item.get("valueInBaseCurrency") or item.get("value") or 0)
+                        if real_time_price > 0:
+                            implied_fx_rate = original_value_base / (real_time_price * quantity)
+                            new_value_asset_currency = premarket_price * quantity
+                            new_value_base_currency = new_value_asset_currency * implied_fx_rate
+
+                            item["marketPrice"] = premarket_price
+                            item["value"] = new_value_asset_currency
+                            item["valueInBaseCurrency"] = new_value_base_currency
+                    else:
+                        # Watchlist item (no quantity): just update the price, skip FX math
                         item["marketPrice"] = premarket_price
-                        item["value"] = new_value_asset_currency
-                        item["valueInBaseCurrency"] = new_value_base_currency
-                        
-                        if prev_price > 0:
-                            item["marketChangePercentage"] = ((premarket_price - prev_price) / prev_price) * 100
-                            item["marketChange"] = premarket_price - prev_price
-                            
-                        item["is_premarket"] = True
+
+                    if prev_price > 0:
+                        item["marketChangePercentage"] = ((premarket_price - prev_price) / prev_price) * 100
+                        item["marketChange"] = premarket_price - prev_price
+
+                    item["is_premarket"] = True
                 else:
                     item["marketPrice"] = real_time_price
                     item["is_premarket"] = False
