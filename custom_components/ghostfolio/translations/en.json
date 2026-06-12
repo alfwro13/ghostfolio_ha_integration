@@ -70,25 +70,91 @@
   },
   "entity": {
     "sensor": {
-      "current_value": { "name": "Portfolio Value" },
-      "net_performance": { "name": "Portfolio Gain" },
-      "net_performance_percentage": { "name": "Time-Weighted Return %" },
-      "total_investment": { "name": "Portfolio Cost" },
-      "net_performance_with_currency": { "name": "Portfolio Gain FX" },
-      "net_performance_percentage_with_currency": { "name": "Time-Weighted Return FX %" },
-      "simple_gain_percentage": { "name": "Simple Gain %" }
+      "current_value": {
+        "name": "Portfolio Value"
+      },
+      "net_performance": {
+        "name": "Portfolio Gain"
+      },
+      "net_performance_percentage": {
+        "name": "Time-Weighted Return %"
+      },
+      "total_investment": {
+        "name": "Portfolio Cost"
+      },
+      "net_performance_with_currency": {
+        "name": "Portfolio Gain FX"
+      },
+      "net_performance_percentage_with_currency": {
+        "name": "Time-Weighted Return FX %"
+      },
+      "simple_gain_percentage": {
+        "name": "Simple Gain %"
+      },
+      "unrealized_pnl": {
+        "name": "Portfolio Unrealized P&L"
+      },
+      "unrealized_gain_percent": {
+        "name": "Unrealized Gain %"
+      },
+      "portfolio_dividends": {
+        "name": "Portfolio Total Dividend"
+      },
+      "account_value": {
+        "name": "{account_name} Value"
+      },
+      "account_net_worth": {
+        "name": "{account_name} Net Worth"
+      },
+      "account_cost": {
+        "name": "{account_name} Cost"
+      },
+      "account_gain": {
+        "name": "{account_name} Gain"
+      },
+      "account_unrealized_pnl": {
+        "name": "{account_name} Unrealized P&L"
+      },
+      "account_twr_percent": {
+        "name": "{account_name} Time-Weighted Return %"
+      },
+      "account_simple_gain_percent": {
+        "name": "{account_name} Simple Gain %"
+      },
+      "account_unrealized_gain_percent": {
+        "name": "{account_name} Unrealized Gain %"
+      },
+      "account_dividends": {
+        "name": "{account_name} Total Dividends"
+      },
+      "account_cash_balance": {
+        "name": "{account_name} Cash Balance"
+      }
     },
     "binary_sensor": {
-      "server": { "name": "Server" },
-      "us_market": { "name": "US Market" },
+      "server": {
+        "name": "Server"
+      },
+      "us_market": {
+        "name": "US Market"
+      },
       "data_provider": {
-        "state": { "on": "Available", "off": "Unavailable" }
+        "state": {
+          "on": "Available",
+          "off": "Unavailable"
+        }
       }
     },
     "button": {
-      "prune_orphans": { "name": "Prune Orphaned Entities" },
-      "clear_watchlist_high_limits": { "name": "Disable Watchlist High Limits" },
-      "clear_watchlist_low_limits": { "name": "Disable Watchlist Low Limits" }
+      "prune_orphans": {
+        "name": "Prune Orphaned Entities"
+      },
+      "clear_watchlist_high_limits": {
+        "name": "Disable Watchlist High Limits"
+      },
+      "clear_watchlist_low_limits": {
+        "name": "Disable Watchlist Low Limits"
+      }
     }
   }
 }

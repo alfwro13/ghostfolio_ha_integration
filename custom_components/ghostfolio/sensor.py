@@ -268,7 +268,7 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
 class GhostfolioCurrentValueSensor(GhostfolioBaseSensor):
     """Sensor tracking the overall portfolio value."""
 
-    _attr_name = "Portfolio Value"
+    _attr_translation_key = "current_value"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
@@ -296,7 +296,7 @@ class GhostfolioCurrentValueSensor(GhostfolioBaseSensor):
 class GhostfolioNetPerformanceSensor(GhostfolioBaseSensor):
     """Sensor tracking Total Gain (Native Ghostfolio Math)."""
 
-    _attr_name = "Portfolio Gain"
+    _attr_translation_key = "net_performance"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
@@ -317,7 +317,7 @@ class GhostfolioNetPerformanceSensor(GhostfolioBaseSensor):
 class GhostfolioUnrealizedPnLSensor(GhostfolioBaseSensor):
     """Sensor tracking true global Unrealized P&L."""
 
-    _attr_name = "Portfolio Unrealized P&L"
+    _attr_translation_key = "unrealized_pnl"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
@@ -339,7 +339,7 @@ class GhostfolioUnrealizedPnLSensor(GhostfolioBaseSensor):
 class GhostfolioTimeWeightedReturnSensor(GhostfolioBaseSensor):
     """Sensor tracking strategy TWR %."""
 
-    _attr_name = "Time-Weighted Return %"
+    _attr_translation_key = "net_performance_percentage"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 2
@@ -361,7 +361,7 @@ class GhostfolioTimeWeightedReturnSensor(GhostfolioBaseSensor):
 class GhostfolioTotalInvestmentSensor(GhostfolioBaseSensor):
     """Sensor tracking the portfolio total cost."""
 
-    _attr_name = "Portfolio Cost"
+    _attr_translation_key = "total_investment"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
@@ -382,7 +382,7 @@ class GhostfolioTotalInvestmentSensor(GhostfolioBaseSensor):
 class GhostfolioTimeWeightedReturnFXSensor(GhostfolioBaseSensor):
     """Sensor tracking TWR % including FX effects."""
 
-    _attr_name = "Time-Weighted Return FX %"
+    _attr_translation_key = "net_performance_percentage_with_currency"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 2
@@ -404,7 +404,7 @@ class GhostfolioTimeWeightedReturnFXSensor(GhostfolioBaseSensor):
 class GhostfolioNetPerformanceWithCurrencySensor(GhostfolioBaseSensor):
     """Sensor tracking global gain including FX effects."""
 
-    _attr_name = "Portfolio Gain FX"
+    _attr_translation_key = "net_performance_with_currency"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
@@ -425,7 +425,7 @@ class GhostfolioNetPerformanceWithCurrencySensor(GhostfolioBaseSensor):
 class GhostfolioSimpleGainPercentSensor(GhostfolioBaseSensor):
     """Sensor tracking true simple return %."""
 
-    _attr_name = "Simple Gain %"
+    _attr_translation_key = "simple_gain_percentage"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 2
@@ -450,7 +450,7 @@ class GhostfolioSimpleGainPercentSensor(GhostfolioBaseSensor):
 class GhostfolioUnrealizedPnLPercentSensor(GhostfolioBaseSensor):
     """Sensor tracking true global Unrealized Gain %."""
 
-    _attr_name = "Unrealized Gain %"
+    _attr_translation_key = "unrealized_gain_percent"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 2
@@ -474,7 +474,7 @@ class GhostfolioUnrealizedPnLPercentSensor(GhostfolioBaseSensor):
 class GhostfolioPortfolioDividendSensor(GhostfolioBaseSensor):
     """Sensor tracking total global dividends."""
 
-    _attr_name = "Portfolio Total Dividend"
+    _attr_translation_key = "portfolio_dividends"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
@@ -542,6 +542,7 @@ class GhostfolioAccountBaseSensor(GhostfolioBaseSensor):
 class GhostfolioAccountValueSensor(GhostfolioAccountBaseSensor):
     """Sensor tracking account market value."""
 
+    _attr_translation_key = "account_value"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
@@ -550,7 +551,7 @@ class GhostfolioAccountValueSensor(GhostfolioAccountBaseSensor):
         """Initialize the account value sensor."""
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_value_{self.account_id}_{config_entry.entry_id}"
-        self._attr_name = f"{self.account_name} Value"
+        self._attr_translation_placeholders = {"account_name": self.account_name}
 
     @property
     def native_value(self) -> float | None:
@@ -563,6 +564,7 @@ class GhostfolioAccountValueSensor(GhostfolioAccountBaseSensor):
 class GhostfolioAccountNetWorthSensor(GhostfolioAccountBaseSensor):
     """Sensor tracking account net worth (includes cash)."""
 
+    _attr_translation_key = "account_net_worth"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
@@ -571,7 +573,7 @@ class GhostfolioAccountNetWorthSensor(GhostfolioAccountBaseSensor):
         """Initialize the account net worth sensor."""
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_net_worth_{self.account_id}_{config_entry.entry_id}"
-        self._attr_name = f"{self.account_name} Net Worth"
+        self._attr_translation_placeholders = {"account_name": self.account_name}
 
     @property
     def native_value(self) -> float | None:
@@ -584,6 +586,7 @@ class GhostfolioAccountNetWorthSensor(GhostfolioAccountBaseSensor):
 class GhostfolioAccountCostSensor(GhostfolioAccountBaseSensor):
     """Sensor tracking account total investment."""
 
+    _attr_translation_key = "account_cost"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
@@ -592,7 +595,7 @@ class GhostfolioAccountCostSensor(GhostfolioAccountBaseSensor):
         """Initialize the account cost sensor."""
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_cost_{self.account_id}_{config_entry.entry_id}"
-        self._attr_name = f"{self.account_name} Cost"
+        self._attr_translation_placeholders = {"account_name": self.account_name}
 
     @property
     def native_value(self) -> float | None:
@@ -605,6 +608,7 @@ class GhostfolioAccountCostSensor(GhostfolioAccountBaseSensor):
 class GhostfolioAccountPerformanceSensor(GhostfolioAccountBaseSensor):
     """Sensor tracking Total Gain per account."""
 
+    _attr_translation_key = "account_gain"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
@@ -613,7 +617,7 @@ class GhostfolioAccountPerformanceSensor(GhostfolioAccountBaseSensor):
         """Initialize the account gain sensor."""
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_perf_{self.account_id}_{config_entry.entry_id}"
-        self._attr_name = f"{self.account_name} Gain"
+        self._attr_translation_placeholders = {"account_name": self.account_name}
 
     @property
     def native_value(self) -> float | None:
@@ -626,6 +630,7 @@ class GhostfolioAccountPerformanceSensor(GhostfolioAccountBaseSensor):
 class GhostfolioAccountUnrealizedPnLSensor(GhostfolioAccountBaseSensor):
     """Sensor tracking true per-account Unrealized Gain."""
 
+    _attr_translation_key = "account_unrealized_pnl"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
@@ -634,7 +639,7 @@ class GhostfolioAccountUnrealizedPnLSensor(GhostfolioAccountBaseSensor):
         """Initialize the account unrealized gain sensor."""
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_unrealized_pnl_{self.account_id}_{config_entry.entry_id}"
-        self._attr_name = f"{self.account_name} Unrealized P&L"
+        self._attr_translation_placeholders = {"account_name": self.account_name}
 
     @property
     def native_value(self) -> float | None:
@@ -648,6 +653,7 @@ class GhostfolioAccountUnrealizedPnLSensor(GhostfolioAccountBaseSensor):
 class GhostfolioAccountTWRSensor(GhostfolioAccountBaseSensor):
     """Sensor tracking account TWR %."""
 
+    _attr_translation_key = "account_twr_percent"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 2
@@ -656,7 +662,7 @@ class GhostfolioAccountTWRSensor(GhostfolioAccountBaseSensor):
         """Initialize the account TWR sensor."""
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_perf_pct_{self.account_id}_{config_entry.entry_id}"
-        self._attr_name = f"{self.account_name} Time-Weighted Return %"
+        self._attr_translation_placeholders = {"account_name": self.account_name}
 
     @property
     def native_value(self) -> float | None:
@@ -670,6 +676,7 @@ class GhostfolioAccountTWRSensor(GhostfolioAccountBaseSensor):
 class GhostfolioAccountSimpleGainSensor(GhostfolioAccountBaseSensor):
     """Sensor tracking true simple return % for the account."""
 
+    _attr_translation_key = "account_simple_gain_percent"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 2
@@ -678,7 +685,7 @@ class GhostfolioAccountSimpleGainSensor(GhostfolioAccountBaseSensor):
         """Initialize the account simple return sensor."""
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_simple_gain_{self.account_id}_{config_entry.entry_id}"
-        self._attr_name = f"{self.account_name} Simple Gain %"
+        self._attr_translation_placeholders = {"account_name": self.account_name}
 
     @property
     def native_value(self) -> float | None:
@@ -695,6 +702,7 @@ class GhostfolioAccountSimpleGainSensor(GhostfolioAccountBaseSensor):
 class GhostfolioAccountUnrealizedPnLPercentSensor(GhostfolioAccountBaseSensor):
     """Sensor tracking true Unrealized Gain % for the account."""
 
+    _attr_translation_key = "account_unrealized_gain_percent"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_suggested_display_precision = 2
@@ -703,7 +711,7 @@ class GhostfolioAccountUnrealizedPnLPercentSensor(GhostfolioAccountBaseSensor):
         """Initialize the account unrealized simple return sensor."""
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_unrealized_pnl_percent_{self.account_id}_{config_entry.entry_id}"
-        self._attr_name = f"{self.account_name} Unrealized Gain %"
+        self._attr_translation_placeholders = {"account_name": self.account_name}
 
     @property
     def native_value(self) -> float | None:
@@ -719,6 +727,7 @@ class GhostfolioAccountUnrealizedPnLPercentSensor(GhostfolioAccountBaseSensor):
 class GhostfolioAccountDividendSensor(GhostfolioAccountBaseSensor):
     """Sensor tracking total account dividends."""
 
+    _attr_translation_key = "account_dividends"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
@@ -727,7 +736,7 @@ class GhostfolioAccountDividendSensor(GhostfolioAccountBaseSensor):
         """Initialize the account dividend sensor."""
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_dividends_{self.account_id}_{config_entry.entry_id}"
-        self._attr_name = f"{self.account_name} Total Dividends"
+        self._attr_translation_placeholders = {"account_name": self.account_name}
 
     @property
     def native_value(self) -> float | None:
@@ -746,6 +755,7 @@ class GhostfolioAccountDividendSensor(GhostfolioAccountBaseSensor):
 class GhostfolioAccountCashBalanceSensor(GhostfolioAccountBaseSensor):
     """Sensor tracking uninvested cash explicitly."""
 
+    _attr_translation_key = "account_cash_balance"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
@@ -754,7 +764,7 @@ class GhostfolioAccountCashBalanceSensor(GhostfolioAccountBaseSensor):
         """Initialize the account cash balance sensor."""
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_cash_balance_{self.account_id}_{config_entry.entry_id}"
-        self._attr_name = f"{self.account_name} Cash Balance"
+        self._attr_translation_placeholders = {"account_name": self.account_name}
 
     @property
     def native_value(self) -> float | None:

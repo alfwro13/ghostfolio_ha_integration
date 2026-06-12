@@ -90,11 +90,54 @@
       },
       "simple_gain_percentage": {
         "name": "Gain simple %"
+      },
+      "unrealized_pnl": {
+        "name": "Plus/moins-value latente du portefeuille"
+      },
+      "unrealized_gain_percent": {
+        "name": "Gain latent %"
+      },
+      "portfolio_dividends": {
+        "name": "Total dividendes du portefeuille"
+      },
+      "account_value": {
+        "name": "Valeur {account_name}"
+      },
+      "account_net_worth": {
+        "name": "Patrimoine net {account_name}"
+      },
+      "account_cost": {
+        "name": "Coût {account_name}"
+      },
+      "account_gain": {
+        "name": "Gain {account_name}"
+      },
+      "account_unrealized_pnl": {
+        "name": "Plus/moins-value latente {account_name}"
+      },
+      "account_twr_percent": {
+        "name": "Rendement pondéré {account_name} %"
+      },
+      "account_simple_gain_percent": {
+        "name": "Gain simple {account_name} %"
+      },
+      "account_unrealized_gain_percent": {
+        "name": "Gain latent {account_name} %"
+      },
+      "account_dividends": {
+        "name": "Total dividendes {account_name}"
+      },
+      "account_cash_balance": {
+        "name": "Solde de trésorerie {account_name}"
       }
     },
     "binary_sensor": {
-      "server": { "name": "Serveur" },
-      "us_market": { "name": "Marché US" },
+      "server": {
+        "name": "Serveur"
+      },
+      "us_market": {
+        "name": "Marché US"
+      },
       "data_provider": {
         "state": {
           "on": "Disponible",
@@ -103,9 +146,15 @@
       }
     },
     "button": {
-      "prune_orphans": { "name": "Nettoyer les entités orphelines" },
-      "clear_watchlist_high_limits": { "name": "Désactiver les limites hautes de la liste de surveillance" },
-      "clear_watchlist_low_limits": { "name": "Désactiver les limites basses de la liste de surveillance" }
+      "prune_orphans": {
+        "name": "Nettoyer les entités orphelines"
+      },
+      "clear_watchlist_high_limits": {
+        "name": "Désactiver les limites hautes de la liste de surveillance"
+      },
+      "clear_watchlist_low_limits": {
+        "name": "Désactiver les limites basses de la liste de surveillance"
+      }
     }
   }
 }

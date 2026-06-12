@@ -90,11 +90,54 @@
       },
       "simple_gain_percentage": {
         "name": "Einfacher Gewinn %"
+      },
+      "unrealized_pnl": {
+        "name": "Nicht realisierter Portfolioverlust/-gewinn"
+      },
+      "unrealized_gain_percent": {
+        "name": "Nicht realisierter Gewinn %"
+      },
+      "portfolio_dividends": {
+        "name": "Portfolio-Dividenden gesamt"
+      },
+      "account_value": {
+        "name": "{account_name} Wert"
+      },
+      "account_net_worth": {
+        "name": "{account_name} Nettovermögen"
+      },
+      "account_cost": {
+        "name": "{account_name} Kosten"
+      },
+      "account_gain": {
+        "name": "{account_name} Gewinn"
+      },
+      "account_unrealized_pnl": {
+        "name": "{account_name} Nicht realisierter G/V"
+      },
+      "account_twr_percent": {
+        "name": "{account_name} Zeitgewichtete Rendite %"
+      },
+      "account_simple_gain_percent": {
+        "name": "{account_name} Einfacher Gewinn %"
+      },
+      "account_unrealized_gain_percent": {
+        "name": "{account_name} Nicht realisierter Gewinn %"
+      },
+      "account_dividends": {
+        "name": "{account_name} Dividenden gesamt"
+      },
+      "account_cash_balance": {
+        "name": "{account_name} Kassenbestand"
       }
     },
     "binary_sensor": {
-      "server": { "name": "Server" },
-      "us_market": { "name": "US-Markt" },
+      "server": {
+        "name": "Server"
+      },
+      "us_market": {
+        "name": "US-Markt"
+      },
       "data_provider": {
         "state": {
           "on": "Verfügbar",
@@ -103,9 +146,15 @@
       }
     },
     "button": {
-      "prune_orphans": { "name": "Verwaiste Entitäten bereinigen" },
-      "clear_watchlist_high_limits": { "name": "Watchlist-Obergrenzen deaktivieren" },
-      "clear_watchlist_low_limits": { "name": "Watchlist-Untergrenzen deaktivieren" }
+      "prune_orphans": {
+        "name": "Verwaiste Entitäten bereinigen"
+      },
+      "clear_watchlist_high_limits": {
+        "name": "Watchlist-Obergrenzen deaktivieren"
+      },
+      "clear_watchlist_low_limits": {
+        "name": "Watchlist-Untergrenzen deaktivieren"
+      }
     }
   }
 }
