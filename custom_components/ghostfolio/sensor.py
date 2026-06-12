@@ -330,6 +330,8 @@ class GhostfolioUnrealizedPnLSensor(GhostfolioBaseSensor):
     @property
     def native_value(self) -> float | None:
         """Return the calculated P&L value."""
+        if not self.coordinator.data or not self.coordinator.data.get("server_online", False):
+            return None
         pnl, _ = self._calculate_unrealized_pnl()
         return round(pnl, 2)
 
@@ -481,8 +483,10 @@ class GhostfolioUnrealizedPnLPercentSensor(GhostfolioBaseSensor):
     @property
     def native_value(self) -> float | None:
         """Calculate Unrealized Gain %."""
+        if not self.coordinator.data or not self.coordinator.data.get("server_online", False):
+            return None
         pnl, cost = self._calculate_unrealized_pnl()
-        if cost <= 0: 
+        if cost <= 0:
             return 0.0
         return round((pnl / cost) * 100, 2)
 
@@ -667,6 +671,8 @@ class GhostfolioAccountUnrealizedPnLSensor(GhostfolioAccountBaseSensor):
     @property
     def native_value(self) -> float | None:
         """Return the calculated Unrealized P&L specific to this account."""
+        if not self.coordinator.data or not self.coordinator.data.get("server_online", False):
+            return None
         pnl, _ = self._calculate_unrealized_pnl(self.account_id)
         return round(pnl, 2)
 
@@ -749,8 +755,10 @@ class GhostfolioAccountUnrealizedPnLPercentSensor(GhostfolioAccountBaseSensor):
     @property
     def native_value(self) -> float | None:
         """Calculate Unrealized Gain % specific to this account."""
+        if not self.coordinator.data or not self.coordinator.data.get("server_online", False):
+            return None
         pnl, cost = self._calculate_unrealized_pnl(self.account_id)
-        if cost <= 0: 
+        if cost <= 0:
             return 0.0
         return round((pnl / cost) * 100, 2)
 
@@ -798,8 +806,8 @@ class GhostfolioAccountCashBalanceSensor(GhostfolioAccountBaseSensor):
     @property
     def native_value(self) -> float | None:
         """Sum the value of any LIQUIDITY assets found within this account."""
-        if not self.coordinator.data: 
-            return 0.0
+        if not self.coordinator.data or not self.coordinator.data.get("server_online", False):
+            return None
             
         holdings_map = self.coordinator.data.get("account_holdings", {})
         holdings = holdings_map.get(self.account_id, [])
