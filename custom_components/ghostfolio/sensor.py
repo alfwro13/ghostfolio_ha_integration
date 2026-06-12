@@ -792,6 +792,7 @@ class LimitAlertMixin:
 
     _prev_low_reached: bool = False
     _prev_high_reached: bool = False
+    _limit_entity_ids: dict | None = None
 
     def _limit_number_unique_id(self, limit_type: str) -> str:
         raise NotImplementedError
@@ -805,9 +806,13 @@ class LimitAlertMixin:
 
     def _get_limit_state(self, limit_type: str, current_value: float, compare_op):
         """Return (limit_display, is_reached, limit_val) for a given limit type."""
-        registry = er.async_get(self.hass)
-        num_unique_id = self._limit_number_unique_id(limit_type)
-        entity_id = registry.async_get_entity_id("number", DOMAIN, num_unique_id)
+        if self._limit_entity_ids is None:
+            self._limit_entity_ids = {}
+        if limit_type not in self._limit_entity_ids:
+            registry = er.async_get(self.hass)
+            num_unique_id = self._limit_number_unique_id(limit_type)
+            self._limit_entity_ids[limit_type] = registry.async_get_entity_id("number", DOMAIN, num_unique_id)
+        entity_id = self._limit_entity_ids[limit_type]
 
         limit_display = None
         is_reached = False
