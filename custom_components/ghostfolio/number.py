@@ -22,6 +22,7 @@ from .const import (
     CONF_SHOW_WATCHLIST,
     DOMAIN,
     PRICE_LIMIT_MAX,
+    WATCHLIST_SCOPE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -100,7 +101,7 @@ async def async_setup_entry(
                                 symbol, 
                                 limit_type,
                                 unique_id,
-                                account_id="watchlist_scope",
+                                account_id=WATCHLIST_SCOPE,
                                 account_name="Watchlist"
                             )
                         )
@@ -152,7 +153,7 @@ class GhostfolioLimitNumber(CoordinatorEntity, RestoreNumber):
         self._attr_name = f"{symbol} - {limit_type.capitalize()} Limit"
 
         # Watchlist high-limit entities are disabled by default to reduce clutter
-        if account_id == "watchlist_scope" and limit_type == "high":
+        if account_id == WATCHLIST_SCOPE and limit_type == "high":
             self._attr_entity_registry_enabled_default = False
 
         self._attr_native_value = None
@@ -203,7 +204,7 @@ class GhostfolioLimitNumber(CoordinatorEntity, RestoreNumber):
         safe_symbol = slugify(self.symbol)
         
         sensor_unique_id = None
-        if self.account_id == "watchlist_scope":
+        if self.account_id == WATCHLIST_SCOPE:
             sensor_unique_id = f"ghostfolio_watchlist_{safe_symbol}_{self.config_entry.entry_id}"
         else:
             sensor_unique_id = f"ghostfolio_holding_{self.account_id}_{safe_symbol}_{self.config_entry.entry_id}"

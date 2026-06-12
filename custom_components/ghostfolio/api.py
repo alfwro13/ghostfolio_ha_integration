@@ -7,6 +7,8 @@ from typing import Any
 
 import aiohttp
 
+from .const import API_TIMEOUT, API_MAX_RETRIES
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -138,7 +140,7 @@ class GhostfolioAPI:
         headers = {"Authorization": f"Bearer {self.auth_token}"}
         ssl_context = False if not self.verify_ssl else None
 
-        for attempt in range(3):
+        for attempt in range(API_MAX_RETRIES):
             try:
                 async with self._get_session().get(url, params=params, headers=headers, ssl=ssl_context) as response:
                     if response.status == 200:
@@ -167,16 +169,16 @@ class GhostfolioAPI:
                         _LOGGER.error("Failed to fetch data from %s: %s", url, response_text[:500])
                         raise GhostfolioAPIError(f"API request failed: {response.status}")
             except aiohttp.ClientError as err:
-                if attempt < 2:
-                    _LOGGER.debug("Request to %s failed, retrying (attempt %d/3): %s", url, attempt + 1, err)
+                if attempt < API_MAX_RETRIES - 1:
+                    _LOGGER.debug("Request to %s failed, retrying (attempt %d/%d): %s", url, attempt + 1, API_MAX_RETRIES, err)
                     await asyncio.sleep(2 ** attempt)
                     continue
-                raise GhostfolioAPIError(f"Connection error after 3 attempts: {err}") from err
+                raise GhostfolioAPIError(f"Connection error after {API_MAX_RETRIES} attempts: {err}") from err
 
     def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
         if self._session is None or self._session.closed:
-            timeout = aiohttp.ClientTimeout(total=30)
+            timeout = aiohttp.ClientTimeout(total=API_TIMEOUT)
             self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
 

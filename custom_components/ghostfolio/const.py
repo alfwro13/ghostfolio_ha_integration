@@ -31,6 +31,28 @@ YAHOO_CRUMB_URL = "https://query1.finance.yahoo.com/v1/test/getcrumb"
 YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
 YAHOO_QUOTE_SUMMARY_URL = "https://query2.finance.yahoo.com/v10/finance/quoteSummary"
 
+# Event fired when a price limit is crossed
+EVENT_LIMIT_ALERT = "ghostfolio_limit_alert"
+
+# Sentinel used as account_id for watchlist-scope limit entities
+WATCHLIST_SCOPE = "watchlist_scope"
+
+# Symbol used as a proxy to determine US market state
+YAHOO_MARKET_PROXY = "SPY"
+
+# Service names
+SERVICE_REFRESH_FUNDAMENTALS = "refresh_fundamentals"
+SERVICE_FETCH_24H_CHANGE = "fetch_24h_change"
+SERVICE_FETCH_PREMARKET = "fetch_premarket_data"
+
+# Lynch PEG ratio valuation thresholds
+LYNCH_PEG_UNDERVALUED = 1.0
+LYNCH_PEG_OVERPRICED = 2.0
+
+# API client configuration
+API_TIMEOUT = 30       # seconds
+API_MAX_RETRIES = 3
+
 # Data Providers to check
 DATA_PROVIDERS = [
     "YAHOO",

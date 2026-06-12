@@ -31,6 +31,10 @@ from .const import (
     YAHOO_QUOTE_URL,
     YAHOO_QUOTE_SUMMARY_URL,
     YAHOO_REQUEST_DELAY,
+    YAHOO_MARKET_PROXY,
+    SERVICE_REFRESH_FUNDAMENTALS,
+    SERVICE_FETCH_24H_CHANGE,
+    SERVICE_FETCH_PREMARKET,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -89,12 +93,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     except Exception as err:
                         _LOGGER.error("Failed to fetch premarket data for %s: %s", e.title, err)
 
-    if not hass.services.has_service(DOMAIN, "refresh_fundamentals"):
-        hass.services.async_register(DOMAIN, "refresh_fundamentals", refresh_fundamentals)
-    if not hass.services.has_service(DOMAIN, "fetch_24h_change"):
-        hass.services.async_register(DOMAIN, "fetch_24h_change", fetch_24h_change)
-    if not hass.services.has_service(DOMAIN, "fetch_premarket_data"):
-        hass.services.async_register(DOMAIN, "fetch_premarket_data", fetch_premarket_data)
+    if not hass.services.has_service(DOMAIN, SERVICE_REFRESH_FUNDAMENTALS):
+        hass.services.async_register(DOMAIN, SERVICE_REFRESH_FUNDAMENTALS, refresh_fundamentals)
+    if not hass.services.has_service(DOMAIN, SERVICE_FETCH_24H_CHANGE):
+        hass.services.async_register(DOMAIN, SERVICE_FETCH_24H_CHANGE, fetch_24h_change)
+    if not hass.services.has_service(DOMAIN, SERVICE_FETCH_PREMARKET):
+        hass.services.async_register(DOMAIN, SERVICE_FETCH_PREMARKET, fetch_premarket_data)
 
     return True
 
@@ -109,9 +113,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if e.entry_id != entry.entry_id
         ]
         if not remaining:
-            hass.services.async_remove(DOMAIN, "refresh_fundamentals")
-            hass.services.async_remove(DOMAIN, "fetch_24h_change")
-            hass.services.async_remove(DOMAIN, "fetch_premarket_data")
+            hass.services.async_remove(DOMAIN, SERVICE_REFRESH_FUNDAMENTALS)
+            hass.services.async_remove(DOMAIN, SERVICE_FETCH_24H_CHANGE)
+            hass.services.async_remove(DOMAIN, SERVICE_FETCH_PREMARKET)
     return unloaded
 
 
@@ -225,7 +229,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def _async_check_us_market_state(self, session, crumb) -> bool | None:
         """Check if US market is open using SPY as a universal proxy."""
-        params = {"symbols": "SPY"}
+        params = {"symbols": YAHOO_MARKET_PROXY}
         if crumb:
             params["crumb"] = crumb
 

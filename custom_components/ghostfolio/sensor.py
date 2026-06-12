@@ -26,6 +26,10 @@ from .const import (
     CONF_SHOW_WATCHLIST,
     CONF_SHOW_FUNDAMENTALS,
     DOMAIN,
+    EVENT_LIMIT_ALERT,
+    WATCHLIST_SCOPE,
+    LYNCH_PEG_UNDERVALUED,
+    LYNCH_PEG_OVERPRICED,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -932,12 +936,12 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         
         low_disp, low_reached, low_val = self._get_limit_state("low", current_price, lambda val, limit: val <= limit)
         if low_reached and not self._prev_low_reached:
-            self.hass.bus.async_fire("ghostfolio_limit_alert", {"ticker": self.symbol, "account": self.account_name, "limit_type": "low", "limit_value": low_val, "current_value": current_price, "currency": currency_asset})
+            self.hass.bus.async_fire(EVENT_LIMIT_ALERT, {"ticker": self.symbol, "account": self.account_name, "limit_type": "low", "limit_value": low_val, "current_value": current_price, "currency": currency_asset})
         self._prev_low_reached = low_reached
 
         high_disp, high_reached, high_val = self._get_limit_state("high", current_price, lambda val, limit: val >= limit)
         if high_reached and not self._prev_high_reached:
-            self.hass.bus.async_fire("ghostfolio_limit_alert", {"ticker": self.symbol, "account": self.account_name, "limit_type": "high", "limit_value": high_val, "current_value": current_price, "currency": currency_asset})
+            self.hass.bus.async_fire(EVENT_LIMIT_ALERT, {"ticker": self.symbol, "account": self.account_name, "limit_type": "high", "limit_value": high_val, "current_value": current_price, "currency": currency_asset})
         self._prev_high_reached = high_reached
 
     @property
@@ -1026,7 +1030,7 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
         self._attr_name = self.ticker_name
 
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"ghostfolio_account_watchlist_scope_{config_entry.entry_id}")},
+            "identifiers": {(DOMAIN, f"ghostfolio_account_{WATCHLIST_SCOPE}_{config_entry.entry_id}")},
             "name": "Watchlist", 
             "manufacturer": "Ghostfolio",
             "model": "Account Portfolio",
@@ -1126,12 +1130,12 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
 
         low_disp, low_reached, low_val = self._get_limit_state("low", current_price, lambda val, limit: val <= limit)
         if low_reached and not self._prev_low_reached:
-            self.hass.bus.async_fire("ghostfolio_limit_alert", {"ticker": self.symbol, "account": "Watchlist", "limit_type": "low", "limit_value": low_val, "current_value": current_price, "currency": currency})
+            self.hass.bus.async_fire(EVENT_LIMIT_ALERT, {"ticker": self.symbol, "account": "Watchlist", "limit_type": "low", "limit_value": low_val, "current_value": current_price, "currency": currency})
         self._prev_low_reached = low_reached
 
         high_disp, high_reached, high_val = self._get_limit_state("high", current_price, lambda val, limit: val >= limit)
         if high_reached and not self._prev_high_reached:
-            self.hass.bus.async_fire("ghostfolio_limit_alert", {"ticker": self.symbol, "account": "Watchlist", "limit_type": "high", "limit_value": high_val, "current_value": current_price, "currency": currency})
+            self.hass.bus.async_fire(EVENT_LIMIT_ALERT, {"ticker": self.symbol, "account": "Watchlist", "limit_type": "high", "limit_value": high_val, "current_value": current_price, "currency": currency})
         self._prev_high_reached = high_reached
 
     @property
@@ -1276,9 +1280,9 @@ class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
         
         if lynch_peg is None:
             attrs["valuation"] = "unknown"
-        elif lynch_peg < 1.0:
+        elif lynch_peg < LYNCH_PEG_UNDERVALUED:
             attrs["valuation"] = "undervalued"
-        elif lynch_peg > 2.0:
+        elif lynch_peg > LYNCH_PEG_OVERPRICED:
             attrs["valuation"] = "overpriced"
         else:
             attrs["valuation"] = "fairly_valued"
