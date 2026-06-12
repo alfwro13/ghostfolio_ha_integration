@@ -8,6 +8,7 @@ from datetime import timedelta
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import UpdateFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
@@ -622,8 +623,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             return data
 
         except Exception as err:
-            _LOGGER.warning("Ghostfolio API update failed: %s", err)
-            return data
+            raise UpdateFailed("Ghostfolio API update failed: %s" % err) from err
 
     async def async_prune_orphans(self) -> None:
         """Remove entities that no longer exist in Ghostfolio."""
