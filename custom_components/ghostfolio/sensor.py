@@ -172,7 +172,7 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
     @property
     def native_unit_of_measurement(self) -> str | None:
         """Determine the unit: honour _attr_native_unit_of_measurement if set, else derive currency."""
-        if self._attr_native_unit_of_measurement is not None:
+        if getattr(self, '_attr_native_unit_of_measurement', None) is not None:
             return self._attr_native_unit_of_measurement
         if not self.coordinator.data:
             return "EUR"
