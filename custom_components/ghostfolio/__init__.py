@@ -514,27 +514,40 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             account_performances = {}
             raw_account_holdings = {}
             raw_watchlist_items = []
-            
+
             show_watchlist = self.entry.data.get(CONF_SHOW_WATCHLIST, True)
 
-            for account in accounts_list:
-                if account.get("isExcluded"):
-                    continue
-                account_id = account.get("id")
-                if not account_id:
-                    continue
+            active_account_ids = [
+                a.get("id") for a in accounts_list
+                if not a.get("isExcluded") and a.get("id")
+            ]
 
-                try:
-                    perf_data = await self.api.get_portfolio_performance(account_id=account_id)
-                    account_performances[account_id] = perf_data
-                except Exception as err:
-                    _LOGGER.debug("Failed to fetch performance for account %s: %s", account_id, err)
+            async def _fetch_account_data(acc_id: str):
+                perf, holdings = await asyncio.gather(
+                    self.api.get_portfolio_performance(account_id=acc_id),
+                    self.api.get_holdings(account_id=acc_id),
+                    return_exceptions=True,
+                )
+                return acc_id, perf, holdings
 
-                try:
-                    holdings_data = await self.api.get_holdings(account_id=account_id)
-                    raw_account_holdings[account_id] = holdings_data.get("holdings", [])
-                except Exception as err:
-                    _LOGGER.debug("Failed to fetch holdings for account %s: %s", account_id, err)
+            account_results = await asyncio.gather(
+                *[_fetch_account_data(acc_id) for acc_id in active_account_ids],
+                return_exceptions=True,
+            )
+
+            for result in account_results:
+                if isinstance(result, Exception):
+                    _LOGGER.debug("Failed to fetch data for an account: %s", result)
+                    continue
+                acc_id, perf, holdings = result
+                if isinstance(perf, Exception):
+                    _LOGGER.debug("Failed to fetch performance for account %s: %s", acc_id, perf)
+                else:
+                    account_performances[acc_id] = perf
+                if isinstance(holdings, Exception):
+                    _LOGGER.debug("Failed to fetch holdings for account %s: %s", acc_id, holdings)
+                else:
+                    raw_account_holdings[acc_id] = holdings.get("holdings", [])
 
             if show_watchlist:
                 try:
