@@ -700,6 +700,8 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             valid_unique_ids.add(f"ghostfolio_provider_{provider.lower()}_{entry_id}")
 
         valid_unique_ids.add(f"ghostfolio_prune_button_{entry_id}")
+        valid_unique_ids.add(f"ghostfolio_clear_watchlist_high_limits_{entry_id}")
+        valid_unique_ids.add(f"ghostfolio_clear_watchlist_low_limits_{entry_id}")
         valid_unique_ids.add(f"ghostfolio_pause_sync_{entry_id}")
 
         show_accounts = self.entry.data.get(CONF_SHOW_ACCOUNTS, True)
