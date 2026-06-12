@@ -355,12 +355,20 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             headers = {"User-Agent": YAHOO_USER_AGENT}
             
             for ticker in tickers:
-                url = f"{YAHOO_QUOTE_SUMMARY_URL}/{ticker}?modules=defaultKeyStatistics,financialData,summaryDetail,earningsTrend"
-                if crumb: 
-                    url += f"&crumb={crumb}"
-                    
+                params = {"modules": "defaultKeyStatistics,financialData,summaryDetail,earningsTrend"}
+                if crumb:
+                    params["crumb"] = crumb
+
                 try:
-                    async with session.get(url, headers=headers) as response:
+                    async with session.get(
+                        f"{YAHOO_QUOTE_SUMMARY_URL}/{ticker}",
+                        params=params,
+                        headers=headers,
+                    ) as response:
+                        if response.status == 401:
+                            self._yahoo_crumb = None
+                            _LOGGER.debug("Yahoo crumb expired during fundamentals fetch, will re-fetch on next cycle")
+                            break
                         if response.status == 200:
                             resp_json = await response.json()
                             res = resp_json.get("quoteSummary", {}).get("result", [])
@@ -368,7 +376,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                                 self.fundamentals_cache[ticker] = res[0]
                 except Exception as e:
                     _LOGGER.debug("Failed to fetch fundamentals for %s: %s", ticker, e)
-                    
+
                 await asyncio.sleep(YAHOO_REQUEST_DELAY)
                 
             self.last_fundamentals_update = dt_util.utcnow()
