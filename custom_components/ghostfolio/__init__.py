@@ -60,45 +60,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # --- Register Custom Services for Manual Fetches ---
-    async def refresh_fundamentals(_):
-        for e in hass.config_entries.async_entries(DOMAIN):
-            if hasattr(e, "runtime_data"):
-                coord = e.runtime_data
-                if isinstance(coord, GhostfolioDataUpdateCoordinator):
-                    try:
-                        await coord.async_fetch_fundamentals()
-                        await coord.async_request_refresh()
-                    except Exception as err:
-                        _LOGGER.error("Failed to refresh fundamentals for %s: %s", e.title, err)
+    def _make_service_handler(method_name: str, label: str):
+        async def _handler(_):
+            for e in hass.config_entries.async_entries(DOMAIN):
+                if hasattr(e, "runtime_data"):
+                    coord = e.runtime_data
+                    if isinstance(coord, GhostfolioDataUpdateCoordinator):
+                        try:
+                            await getattr(coord, method_name)()
+                            await coord.async_request_refresh()
+                        except Exception as err:
+                            _LOGGER.error("Failed to %s for %s: %s", label, e.title, err)
+        return _handler
 
-    async def fetch_24h_change(_):
-        for e in hass.config_entries.async_entries(DOMAIN):
-            if hasattr(e, "runtime_data"):
-                coord = e.runtime_data
-                if isinstance(coord, GhostfolioDataUpdateCoordinator):
-                    try:
-                        await coord.async_fetch_24h_change()
-                        await coord.async_request_refresh()
-                    except Exception as err:
-                        _LOGGER.error("Failed to fetch 24h change for %s: %s", e.title, err)
-
-    async def fetch_premarket_data(_):
-        for e in hass.config_entries.async_entries(DOMAIN):
-            if hasattr(e, "runtime_data"):
-                coord = e.runtime_data
-                if isinstance(coord, GhostfolioDataUpdateCoordinator):
-                    try:
-                        await coord.async_fetch_premarket()
-                        await coord.async_request_refresh()
-                    except Exception as err:
-                        _LOGGER.error("Failed to fetch premarket data for %s: %s", e.title, err)
-
-    if not hass.services.has_service(DOMAIN, SERVICE_REFRESH_FUNDAMENTALS):
-        hass.services.async_register(DOMAIN, SERVICE_REFRESH_FUNDAMENTALS, refresh_fundamentals)
-    if not hass.services.has_service(DOMAIN, SERVICE_FETCH_24H_CHANGE):
-        hass.services.async_register(DOMAIN, SERVICE_FETCH_24H_CHANGE, fetch_24h_change)
-    if not hass.services.has_service(DOMAIN, SERVICE_FETCH_PREMARKET):
-        hass.services.async_register(DOMAIN, SERVICE_FETCH_PREMARKET, fetch_premarket_data)
+    for service_name, method, label in [
+        (SERVICE_REFRESH_FUNDAMENTALS, "async_fetch_fundamentals", "refresh fundamentals"),
+        (SERVICE_FETCH_24H_CHANGE,     "async_fetch_24h_change",   "fetch 24h change"),
+        (SERVICE_FETCH_PREMARKET,      "async_fetch_premarket",    "fetch premarket data"),
+    ]:
+        if not hass.services.has_service(DOMAIN, service_name):
+            hass.services.async_register(DOMAIN, service_name, _make_service_handler(method, label))
 
     return True
 
