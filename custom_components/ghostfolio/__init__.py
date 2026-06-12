@@ -138,6 +138,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         self._cache_loaded = False
         self._yahoo_crumb = None
         self.sync_paused = False
+        self._enrich_cache: dict = {}
 
     async def _get_yahoo_crumb(self, session):
         """Fetch Yahoo Finance crumb to bypass API restrictions."""
@@ -379,7 +380,12 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         
         if symbol and data_source:
             try:
-                market_data_resp = await self.api.get_market_data(data_source, symbol)
+                cache_key = (data_source, symbol)
+                if cache_key in self._enrich_cache:
+                    market_data_resp = self._enrich_cache[cache_key]
+                else:
+                    market_data_resp = await self.api.get_market_data(data_source, symbol)
+                    self._enrich_cache[cache_key] = market_data_resp
                 history = market_data_resp.get("marketData", [])
                 profile = market_data_resp.get("assetProfile", {})
                 
@@ -462,6 +468,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self):
         """Fetch data from Ghostfolio API."""
+        self._enrich_cache = {}
 
         if getattr(self, "sync_paused", False) and self.data is not None:
             _LOGGER.debug("Ghostfolio sync is paused. Returning last known data.")
