@@ -500,8 +500,8 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             is_open = await self._async_check_us_market_state(session, crumb)
             if is_open is not None:
                 self.us_market_open = is_open
-        except Exception:
-            pass
+        except Exception as err:
+            _LOGGER.debug("Failed to check US market state during update: %s", err)
 
         if self.us_market_open:
             self.premarket_cache.clear()
@@ -532,19 +532,21 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for account in accounts_list:
                 if account.get("isExcluded"):
                     continue
-                account_id = account["id"]
-                
+                account_id = account.get("id")
+                if not account_id:
+                    continue
+
                 try:
                     perf_data = await self.api.get_portfolio_performance(account_id=account_id)
                     account_performances[account_id] = perf_data
-                except Exception:
-                    pass
+                except Exception as err:
+                    _LOGGER.debug("Failed to fetch performance for account %s: %s", account_id, err)
 
                 try:
                     holdings_data = await self.api.get_holdings(account_id=account_id)
                     raw_account_holdings[account_id] = holdings_data.get("holdings", [])
-                except Exception:
-                    pass
+                except Exception as err:
+                    _LOGGER.debug("Failed to fetch holdings for account %s: %s", account_id, err)
 
             if show_watchlist:
                 try:
@@ -553,8 +555,8 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                         raw_watchlist_items = wl_response
                     elif isinstance(wl_response, dict):
                         raw_watchlist_items = wl_response.get("watchlist", []) or wl_response.get("items", [])
-                except Exception:
-                    pass
+                except Exception as err:
+                    _LOGGER.debug("Failed to fetch watchlist: %s", err)
 
             provider_results = {}
             async def _fetch_health(code):

@@ -531,8 +531,8 @@ class GhostfolioAccountBaseSensor(GhostfolioBaseSensor):
     def __init__(self, coordinator, config_entry, account_data):
         """Initialize the account base sensor."""
         super().__init__(coordinator, config_entry)
-        self.account_id = account_data["id"]
-        self.account_name = account_data["name"]
+        self.account_id = account_data.get("id", "")
+        self.account_name = account_data.get("name", "Unknown Account")
         
         self._attr_device_info = {
             "identifiers": {(DOMAIN, f"ghostfolio_account_{self.account_id}_{config_entry.entry_id}")},
