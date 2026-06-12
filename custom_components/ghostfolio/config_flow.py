@@ -135,11 +135,17 @@ class GhostfolioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                         portfolio_name = user_input.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
                         unique_id = f"{user_input[CONF_BASE_URL]}_{portfolio_name}".replace(" ", "_").lower()
-                        await self.async_set_unique_id(unique_id)
-                        self._abort_if_unique_id_mismatch(reason="wrong_account")
+                        for existing_entry in self._async_current_entries(include_ignore=False):
+                            if (
+                                existing_entry.entry_id != config_entry.entry_id
+                                and existing_entry.unique_id == unique_id
+                            ):
+                                return self.async_abort(reason="already_configured")
 
                         return self.async_update_reload_and_abort(
                             config_entry,
+                            unique_id=unique_id,
+                            title=portfolio_name,
                             data_updates=user_input,
                         )
                     else:
