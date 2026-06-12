@@ -4,7 +4,7 @@ This document provides guidance for developers who want to contribute to or modi
 
 ## Prerequisites
 
-- Python 3.11 or higher
+- Python 3.12 or higher (3.12+ required for `type` alias syntax used in `GhostfolioConfigEntry`)
 - Home Assistant Core 2025.6.0 or higher
 - A running Ghostfolio instance for testing
 - Git for version control
@@ -62,29 +62,38 @@ ln -s $(pwd)/custom_components/ghostfolio ~/.homeassistant/custom_components/gho
 ```
 ghostfolio_ha_integration/
 ├── custom_components/ghostfolio/
-│   ├── __init__.py          # Integration setup, coordinator, and services
-│   ├── api.py               # Ghostfolio API client with retry logic
+│   ├── __init__.py          # Integration setup, coordinator, services, GhostfolioConfigEntry
+│   ├── api.py               # Ghostfolio API client with retry logic and auth lock
 │   ├── binary_sensor.py     # Server, US Market, and Data Provider sensors
 │   ├── button.py            # Prune and watchlist limit disable buttons
 │   ├── config_flow.py       # Configuration and reconfigure flows
-│   ├── const.py             # All constants (keys, URLs, delays, limits)
+│   ├── const.py             # All constants (keys, URLs, delays, limits, portfolio_device_info)
+│   ├── diagnostics.py       # HA diagnostics platform (Download Diagnostics button)
 │   ├── manifest.json        # Integration metadata
 │   ├── number.py            # Price limit number entities (High/Low per asset)
 │   ├── sensor.py            # All sensor entities (global, account, holding, watchlist, fundamentals)
-│   ├── services.yaml        # Custom service definitions
+│   ├── services.yaml        # Custom service definitions (with config_entry_id field)
 │   ├── strings.json         # Base translation strings (source of truth)
 │   ├── switch.py            # Pause Sync switch
 │   └── translations/
 │       ├── de.json          # German translations
 │       ├── en.json          # English translations
 │       └── fr.json          # French translations
+├── tests/
+│   ├── __init__.py
+│   ├── conftest.py          # Shared fixtures and sample data
+│   ├── test_config_flow.py  # Config flow happy path and error cases
+│   ├── test_coordinator.py  # Coordinator update, UpdateFailed, sync-paused tests
+│   └── test_init.py         # Setup/unload lifecycle and one entity per platform
 ├── .github/workflows/
 │   ├── hassfest.yaml        # Validates manifest and integration structure
 │   ├── validate.yml         # HACS validation
 │   └── release.yml          # Automated release on version bump
 ├── assets/                  # Example automations and dashboard configs
 ├── docker-compose.yml       # Local Ghostfolio instance for testing
-└── hacs.json                # HACS metadata
+├── hacs.json                # HACS metadata
+├── pytest.ini               # Test runner configuration
+└── requirements_test.txt    # Test dependencies
 ```
 
 ## Key Components
@@ -107,12 +116,16 @@ The `GhostfolioDataUpdateCoordinator` is the heart of the integration. It extend
 - `_schedule_refresh()` is overridden to suppress timer scheduling while paused.
 - Use `async_set_sync_paused(True/False)` — do not set the attribute directly.
 
+**Failure semantics:** `_async_update_data()` raises `UpdateFailed` on any top-level API error. The coordinator retains the last-good `data` dict and sets `last_update_success = False`, causing all `CoordinatorEntity`-based entities to become unavailable automatically. Per-account soft failures (individual account fetch errors) are logged at DEBUG and do not abort the whole update.
+
 **Key methods:**
-- `_async_update_data()` — main coordinator update, called on every poll cycle
+- `_async_update_data()` — main coordinator update, raises `UpdateFailed` on API failure
 - `async_set_sync_paused(paused)` — pause/resume with persistence and timer control
 - `async_fetch_premarket()` — fetches Yahoo pre/post-market prices for US symbols
 - `async_fetch_24h_change()` — fetches previous close prices from Yahoo
 - `async_fetch_fundamentals()` — fetches PEG, margins, earnings data from Yahoo
+- `_yahoo_quote_summary_fetch_all(modules, label)` — shared loop used by both fetch methods above; handles crumb expiry, per-ticker errors, and rate-limit sleep
+- `_flatten_symbol_profile(item)` — promotes Ghostfolio 3.7.0 nested `symbolProfile` fields to the top level (mutates in place)
 - `_enrich_item_with_market_data()` — enriches a holding/watchlist item with live prices and history
 - `async_prune_orphans()` — removes entities no longer present in Ghostfolio
 
@@ -121,7 +134,9 @@ The `GhostfolioDataUpdateCoordinator` is the heart of the integration. It extend
 - `ghostfolio.fetch_24h_change`
 - `ghostfolio.fetch_premarket_data`
 
-Services are registered once (guarded by `has_service`) and removed when the last config entry is unloaded.
+All three services accept an optional `config_entry_id` field; when present, only the matching entry is acted on. Services are registered once (guarded by `has_service`) and removed when the last config entry is unloaded.
+
+**Typed config entry:** `GhostfolioConfigEntry = ConfigEntry[GhostfolioDataUpdateCoordinator]` is defined at the bottom of `__init__.py` and imported by all platform files. Use it as the type annotation for `entry` parameters instead of bare `ConfigEntry` so that `entry.runtime_data` is correctly typed without casts.
 
 ---
 
@@ -165,7 +180,17 @@ State = total market value in base currency. Rich `extra_state_attributes` inclu
 State = current market price. Attributes include 24h change, 50d/200d trend, and limit state.
 
 **Fundamentals Sensors (1 per symbol):**
-State = ticker symbol. Attributes include Lynch PEG, Forward PE, margins, growth projections, and all Yahoo Finance key statistics. Requires "Show Fundamentals" to be enabled.
+State = ticker symbol. Key metrics (`lynch_peg_ratio`, `valuation`, `forward_pe`, etc.) are individual recorded attributes. The full raw Yahoo payload is stored under the single `detailed_stats` dict attribute, which is marked with `_unrecorded_attributes = frozenset({"detailed_stats"})` to prevent recorder bloat. Requires "Show Fundamentals" to be enabled.
+
+**Translation keys:** All 20 static global and account sensors use `_attr_translation_key` instead of `_attr_name`. Account sensors additionally set `_attr_translation_placeholders = {"account_name": ...}` in `__init__`. Keys are defined in `strings.json` and all three language files. Per-holding, watchlist, and fundamentals sensors retain `_attr_name` because their names are dynamically derived from ticker symbols.
+
+**Shared helpers on `GhostfolioBaseSensor`:**
+- `_holdings_healthy(holdings)` — validates a list of holdings; used by both `is_portfolio_healthy` and `is_account_healthy`
+- `native_unit_of_measurement` — base property that short-circuits to `_attr_native_unit_of_measurement` when set (percent sensors), otherwise derives the portfolio base currency dynamically
+
+**Shared module-level helpers:**
+- `_get_forward_pe(data)` — GBp-aware forward P/E lookup, used by both `_calculate_lynch_peg` and `extra_state_attributes`
+- `LimitAlertMixin` — shared price-alert machinery for holding and watchlist sensors
 
 All sensor types are added dynamically via a `_update_sensors()` coordinator listener registered in `async_setup_entry`. The listener is guarded with `if not coordinator.data: return` and tracks `known_ids` to avoid creating duplicate entities.
 
@@ -204,9 +229,15 @@ All sensor types are added dynamically via a `_update_sensors()` coordinator lis
 
 ---
 
+### Diagnostics (`diagnostics.py`)
+
+Implements `async_get_config_entry_diagnostics`. HA auto-discovers this file and adds a **Download Diagnostics** button to the integration card. The report includes config (access token redacted), coordinator state, data shape summary, and entity counts. No monetary values or holding details are included.
+
+---
+
 ### Config Flow (`config_flow.py`)
 
-Supports initial setup (`async_step_user`) and reconfiguration (`async_step_reconfigure`).
+Supports initial setup (`async_step_user`) and reconfiguration (`async_step_reconfigure`). Both steps share `_build_schema()` and `_async_validate_connection()` module-level helpers to avoid duplication. The temporary `GhostfolioAPI` instance created during validation is always closed in a `finally` block.
 
 **Configuration options:**
 - `portfolio_name` — friendly label for the integration instance
@@ -229,9 +260,16 @@ All magic values live here. When adding features, add new constants rather than 
 - `YAHOO_USER_AGENT` — shared User-Agent string for all Yahoo Finance requests
 - `YAHOO_SESSION_URL`, `YAHOO_CRUMB_URL`, `YAHOO_QUOTE_URL`, `YAHOO_QUOTE_SUMMARY_URL` — Yahoo API base URLs
 - `YAHOO_REQUEST_DELAY` — seconds between sequential Yahoo requests (rate limiting)
+- `YAHOO_MARKET_PROXY` — ticker used to determine US market open state (`"SPY"`)
 - `PRICE_LIMIT_MAX` — maximum value for price limit number entities
 - `DATA_PROVIDERS` — list of provider codes to health-check
 - `DEFAULT_UPDATE_INTERVAL` — default coordinator poll interval in minutes
+- `API_TIMEOUT`, `API_MAX_RETRIES` — Ghostfolio API client configuration
+- `EVENT_LIMIT_ALERT` — HA event name fired when a price limit is crossed
+- `WATCHLIST_SCOPE` — sentinel account ID for watchlist-scoped limit entities
+- `LYNCH_PEG_UNDERVALUED`, `LYNCH_PEG_OVERPRICED` — Lynch PEG ratio thresholds
+- `SERVICE_REFRESH_FUNDAMENTALS`, `SERVICE_FETCH_24H_CHANGE`, `SERVICE_FETCH_PREMARKET` — service name strings
+- `portfolio_device_info(config_entry)` — helper function returning the shared portfolio `DeviceInfo` dict; used by all platform files to avoid duplication
 
 ---
 
@@ -248,8 +286,9 @@ All magic values live here. When adding features, add new constants rather than 
 ### Adding New Sensors
 
 1. Add sensor class in `sensor.py` extending `GhostfolioBaseSensor` or `GhostfolioAccountBaseSensor`
-2. Add a translation key in `strings.json` and all three language files
-3. Register the entity in the appropriate setup block or `_update_sensors()` listener
+2. Use `_attr_translation_key` (not `_attr_name`) for the entity name; for dynamic names with account/ticker placeholders, also set `self._attr_translation_placeholders` in `__init__`
+3. Add the translation key to `strings.json` and all three language files
+4. Register the entity in the appropriate setup block or `_update_sensors()` listener
 
 ### Adding New Config Options
 
@@ -267,6 +306,34 @@ All magic values live here. When adding features, add new constants rather than 
 1. Update `strings.json` (source of truth) with the new key
 2. Add translations to `translations/en.json`, `de.json`, and `fr.json` — all three must be kept in sync
 3. Follow the existing nested structure: `config.step`, `config.error`, `entity.<platform>.<key>`
+
+---
+
+## Automated Tests
+
+The `tests/` directory contains a basic pytest suite using [`pytest-homeassistant-custom-component`](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component).
+
+### Install test dependencies
+
+```bash
+pip install -r requirements_test.txt
+```
+
+### Run the tests
+
+```bash
+pytest
+```
+
+### Test coverage
+
+| File | What it tests |
+|---|---|
+| `test_config_flow.py` | User step success, cannot_connect, auth_failed, invalid_url, duplicate abort |
+| `test_coordinator.py` | Successful data update, `UpdateFailed` on API error, sync-paused caching |
+| `test_init.py` | Setup/unload lifecycle, one entity per platform (sensor, binary_sensor, button, switch), state assertion for Portfolio Value and Server sensors |
+
+All tests use a fully mocked `GhostfolioAPI` — no live Ghostfolio or Yahoo Finance connection is required.
 
 ---
 
@@ -297,20 +364,22 @@ logger:
 
 Before submitting changes:
 
+- [ ] `pytest` passes with no errors
 - [ ] Test with multiple portfolio configurations (multiple accounts, holdings, watchlist items)
 - [ ] Verify all sensor types update correctly (global, account, holding, watchlist, fundamentals)
 - [ ] Test configuration flow — initial setup and reconfigure
 - [ ] Test reconfigure preserving existing entity unique IDs
-- [ ] Check all translations are present in EN, DE, and FR
+- [ ] Check all translations are present in EN, DE, and FR (all four files must have identical key sets)
 - [ ] Test SSL verification on and off
-- [ ] Verify error handling for network issues (disconnect Ghostfolio mid-update)
+- [ ] Verify error handling for network issues — entities should become **unavailable** (not show stale data) when Ghostfolio is unreachable
 - [ ] Test with invalid credentials
 - [ ] Test Pause Sync — verify no API calls while paused and state survives HA restart
 - [ ] Test Prune Orphaned Entities button after removing a holding or watchlist item in Ghostfolio
 - [ ] Test Disable Watchlist High/Low Limits buttons
 - [ ] Verify new watchlist items added in Ghostfolio appear in HA on next poll with high limit disabled by default
-- [ ] Test pre-market / 24h change / fundamentals manual service calls
+- [ ] Test pre-market / 24h change / fundamentals manual service calls — with and without `config_entry_id`
 - [ ] Verify coordinator gracefully handles a data provider being down (sensor shows Unknown, not zero)
+- [ ] Download Diagnostics — confirm access token is redacted in the output
 
 ---
 

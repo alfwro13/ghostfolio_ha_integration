@@ -95,10 +95,11 @@ Track items from your Ghostfolio Watchlist even if you don't own them yet.
 ### 5. Fundamentals Sensors
 Track detailed fundamental metrics for your holdings and watchlist items via Yahoo Finance. *(Requires "Show Fundamentals" to be enabled in configuration)*
 - **Sensor State**: The ticker symbol.
-- **Attributes**:
-  - `valuation` (e.g., undervalued, overpriced, fairly_valued), `lynch_peg_ratio`
+- **Recorded attributes** (stored in history):
+  - `valuation` (e.g., `undervalued`, `overpriced`, `fairly_valued`), `lynch_peg_ratio`
   - `standard_peg_ratio`, `forward_pe`, `dividend_yield`, `projected_1y_growth`
-  - Additional underlying metrics derived from Yahoo Finance's Financial Data and Key Statistics modules.
+  - `ticker`, `data_pulled_at`
+- **`detailed_stats`** (current state only, not recorded to reduce database size): a dict containing all raw Yahoo Finance fields from `defaultKeyStatistics`, `financialData`, and `summaryDetail`. Access individual fields in templates with `state_attr('sensor.TICKER_fundamentals', 'detailed_stats')['profitMargins']`.
 
 ### 6. Price Limit Configuration (Inputs)
 For every Holding and Watchlist item, the integration creates two **Number** entities that allow you to set price targets directly from Home Assistant.
@@ -138,6 +139,7 @@ To help you troubleshoot issues and maintain your setup, the integration provide
 - **Disable Watchlist High Limits**: A button that disables all currently-enabled watchlist high limit number entities in the entity registry in one click.
 - **Disable Watchlist Low Limits**: A button that disables all currently-enabled watchlist low limit number entities in the entity registry in one click.
 - **Pause Sync**: A switch that pauses all polling from Ghostfolio. When paused, the coordinator's update timer is cancelled and no API calls are made. The paused state is persisted across Home Assistant restarts. Toggle it back off to immediately resume syncing.
+- **Download Diagnostics**: Available on the integration card in Settings → Integrations → Ghostfolio → three-dot menu. Downloads a JSON snapshot covering config (access token redacted), coordinator state, data shape, and entity counts — useful when reporting bugs.
 
 ### 9. Manual Services & Pre-Market Data
 
@@ -146,6 +148,14 @@ This integration exposes specific services to Home Assistant, allowing you to ma
 * **`ghostfolio.fetch_premarket_data`**: Pulls live Pre-Market and Post-Market prices for US stocks (Yahoo Finance). It safely calculates the exact holding value in your base currency without breaking regular Ghostfolio updates.
 * **`ghostfolio.fetch_24h_change`**: Pulls the official Previous Close to accurately calculate the 24-hour change percentage, bypassing timezone delays.
 * **`ghostfolio.refresh_fundamentals`**: Forces an immediate refresh of deep fundamental metrics (PEG, Margins, etc.).
+
+All three services accept an optional `config_entry_id` field. When provided, only that specific portfolio entry is refreshed. When omitted, all configured Ghostfolio portfolios are updated — useful for multi-portfolio setups.
+
+```yaml
+service: ghostfolio.refresh_fundamentals
+data:
+  config_entry_id: "abc123def456"   # optional — omit to refresh all portfolios
+```
 
 [**Example Automation (Pre-Market Fetch)**](assets/automation_pre_market_fetch.md)
 
