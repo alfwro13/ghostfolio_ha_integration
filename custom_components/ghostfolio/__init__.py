@@ -282,46 +282,47 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as e:
             _LOGGER.error("Failed pre-market fetch process: %s", e)
 
+    async def _yahoo_quote_summary_fetch_all(self, modules: str, label: str) -> dict:
+        """Fetch quoteSummary for every active Yahoo ticker. Returns {ticker: first_result}."""
+        results: dict = {}
+        tickers = self._get_active_yahoo_symbols()
+        if not tickers:
+            return results
+        session = self.api._get_session()
+        crumb = await self._get_yahoo_crumb(session)
+        headers = {"User-Agent": YAHOO_USER_AGENT}
+        for ticker in tickers:
+            params = {"modules": modules}
+            if crumb:
+                params["crumb"] = crumb
+            try:
+                async with session.get(
+                    f"{YAHOO_QUOTE_SUMMARY_URL}/{ticker}",
+                    params=params,
+                    headers=headers,
+                ) as response:
+                    if response.status == 401:
+                        self._yahoo_crumb = None
+                        _LOGGER.debug("Yahoo crumb expired during %s fetch, will re-fetch on next cycle", label)
+                        break
+                    if response.status == 200:
+                        resp_json = await response.json()
+                        res = resp_json.get("quoteSummary", {}).get("result", [])
+                        if res:
+                            results[ticker] = res[0]
+            except Exception as e:
+                _LOGGER.debug("Failed to fetch %s for %s: %s", label, ticker, e)
+            await asyncio.sleep(YAHOO_REQUEST_DELAY)
+        return results
+
     async def async_fetch_24h_change(self):
         """Manually fetch previous close using sequential API calls."""
         _LOGGER.info("Manually fetching 24h Change (Previous Close) from Yahoo")
-        tickers = self._get_active_yahoo_symbols()
-        if not tickers: 
-            return
-            
         try:
-            session = self.api._get_session()
-            crumb = await self._get_yahoo_crumb(session)
-            headers = {"User-Agent": YAHOO_USER_AGENT}
-            
-            for ticker in tickers:
-                params = {"modules": "price"}
-                if crumb:
-                    params["crumb"] = crumb
-
-                try:
-                    async with session.get(
-                        f"{YAHOO_QUOTE_SUMMARY_URL}/{ticker}",
-                        params=params,
-                        headers=headers,
-                    ) as response:
-                        if response.status == 401:
-                            self._yahoo_crumb = None
-                            _LOGGER.debug("Yahoo crumb expired during 24h fetch, will re-fetch on next cycle")
-                            break
-                        if response.status == 200:
-                            resp_json = await response.json()
-                            res = resp_json.get("quoteSummary", {}).get("result", [])
-                            if res:
-                                price_data = res[0].get("price", {})
-                                prev_close = price_data.get("regularMarketPreviousClose", {}).get("raw")
-                                if prev_close is not None:
-                                    self.previous_close_cache[ticker] = prev_close
-                except Exception as e:
-                    _LOGGER.debug("Failed to fetch previous close for %s: %s", ticker, e)
-
-                await asyncio.sleep(YAHOO_REQUEST_DELAY)
-                
+            for ticker, data in (await self._yahoo_quote_summary_fetch_all("price", "24h change")).items():
+                prev_close = data.get("price", {}).get("regularMarketPreviousClose", {}).get("raw")
+                if prev_close is not None:
+                    self.previous_close_cache[ticker] = prev_close
             self.last_previous_close_update = dt_util.utcnow()
             await self._save_cache()
         except Exception as e:
@@ -330,40 +331,12 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
     async def async_fetch_fundamentals(self):
         """Manually fetch deep fundamentals using sequential API calls."""
         _LOGGER.info("Manually fetching Fundamentals from Yahoo")
-        tickers = self._get_active_yahoo_symbols()
-        if not tickers: 
-            return
-            
         try:
-            session = self.api._get_session()
-            crumb = await self._get_yahoo_crumb(session)
-            headers = {"User-Agent": YAHOO_USER_AGENT}
-            
-            for ticker in tickers:
-                params = {"modules": "defaultKeyStatistics,financialData,summaryDetail,earningsTrend"}
-                if crumb:
-                    params["crumb"] = crumb
-
-                try:
-                    async with session.get(
-                        f"{YAHOO_QUOTE_SUMMARY_URL}/{ticker}",
-                        params=params,
-                        headers=headers,
-                    ) as response:
-                        if response.status == 401:
-                            self._yahoo_crumb = None
-                            _LOGGER.debug("Yahoo crumb expired during fundamentals fetch, will re-fetch on next cycle")
-                            break
-                        if response.status == 200:
-                            resp_json = await response.json()
-                            res = resp_json.get("quoteSummary", {}).get("result", [])
-                            if res:
-                                self.fundamentals_cache[ticker] = res[0]
-                except Exception as e:
-                    _LOGGER.debug("Failed to fetch fundamentals for %s: %s", ticker, e)
-
-                await asyncio.sleep(YAHOO_REQUEST_DELAY)
-                
+            results = await self._yahoo_quote_summary_fetch_all(
+                "defaultKeyStatistics,financialData,summaryDetail,earningsTrend",
+                "fundamentals",
+            )
+            self.fundamentals_cache.update(results)
             self.last_fundamentals_update = dt_util.utcnow()
             await self._save_cache()
         except Exception as e:
