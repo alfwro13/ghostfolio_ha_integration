@@ -11,12 +11,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.const import EntityCategory
 
-from . import GhostfolioDataUpdateCoordinator
+from . import GhostfolioDataUpdateCoordinator, GhostfolioConfigEntry
 from .const import DOMAIN, DATA_PROVIDERS, portfolio_device_info
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: GhostfolioConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the binary sensors."""

@@ -43,7 +43,7 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.NUMBER, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SWITCH]
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: GhostfolioConfigEntry) -> bool:
     """Set up Ghostfolio from a config entry."""
     api = GhostfolioAPI(
         base_url=entry.data["base_url"],
@@ -64,14 +64,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     def _make_service_handler(method_name: str, label: str):
         async def _handler(_):
             for e in hass.config_entries.async_entries(DOMAIN):
-                if hasattr(e, "runtime_data"):
-                    coord = e.runtime_data
-                    if isinstance(coord, GhostfolioDataUpdateCoordinator):
-                        try:
-                            await getattr(coord, method_name)()
-                            await coord.async_request_refresh()
-                        except Exception as err:
-                            _LOGGER.error("Failed to %s for %s: %s", label, e.title, err)
+                coord = e.runtime_data
+                if isinstance(coord, GhostfolioDataUpdateCoordinator):
+                    try:
+                        await getattr(coord, method_name)()
+                        await coord.async_request_refresh()
+                    except Exception as err:
+                        _LOGGER.error("Failed to %s for %s: %s", label, e.title, err)
         return _handler
 
     for service_name, method, label in [
@@ -85,7 +84,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: GhostfolioConfigEntry) -> bool:
     """Unload a config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
@@ -712,3 +711,6 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         for entity_entry in entries:
             if entity_entry.unique_id not in valid_unique_ids:
                 entity_registry.async_remove(entity_entry.entity_id)
+
+
+type GhostfolioConfigEntry = ConfigEntry[GhostfolioDataUpdateCoordinator]

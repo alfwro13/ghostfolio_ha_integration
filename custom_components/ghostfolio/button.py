@@ -9,12 +9,12 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers import entity_registry as er
 from homeassistant.const import EntityCategory
 
-from . import GhostfolioDataUpdateCoordinator
+from . import GhostfolioDataUpdateCoordinator, GhostfolioConfigEntry
 from .const import DOMAIN, portfolio_device_info
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: GhostfolioConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Ghostfolio button platform."""
