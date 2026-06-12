@@ -299,7 +299,8 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         session = self.api._get_session()
         crumb = await self._get_yahoo_crumb(session)
         headers = {"User-Agent": YAHOO_USER_AGENT}
-        for ticker in tickers:
+        last_idx = len(tickers) - 1
+        for i, ticker in enumerate(tickers):
             params = {"modules": modules}
             if crumb:
                 params["crumb"] = crumb
@@ -320,7 +321,8 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                             results[ticker] = res[0]
             except Exception as e:
                 _LOGGER.debug("Failed to fetch %s for %s: %s", label, ticker, e)
-            await asyncio.sleep(YAHOO_REQUEST_DELAY)
+            if i < last_idx:
+                await asyncio.sleep(YAHOO_REQUEST_DELAY)
         return results
 
     async def async_fetch_24h_change(self):
