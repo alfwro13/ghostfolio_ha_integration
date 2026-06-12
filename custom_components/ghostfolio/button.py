@@ -10,7 +10,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.const import EntityCategory
 
 from . import GhostfolioDataUpdateCoordinator
-from .const import DOMAIN, CONF_PORTFOLIO_NAME
+from .const import DOMAIN, portfolio_device_info
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -37,15 +37,8 @@ class GhostfolioPruneButton(CoordinatorEntity, ButtonEntity):
     def __init__(self, coordinator: GhostfolioDataUpdateCoordinator, config_entry: ConfigEntry):
         """Initialize the button."""
         super().__init__(coordinator)
-        self.portfolio_name = config_entry.data.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
         self._attr_unique_id = f"ghostfolio_prune_button_{config_entry.entry_id}"
-        
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"ghostfolio_portfolio_{config_entry.entry_id}")},
-            "name": f"{self.portfolio_name} Portfolio",
-            "manufacturer": "Ghostfolio",
-            "model": "Portfolio Tracker",
-        }
+        self._attr_device_info = portfolio_device_info(config_entry)
 
     async def async_press(self) -> None:
         """Handle the button press."""
@@ -66,14 +59,7 @@ class GhostfolioClearWatchlistLimitsButton(CoordinatorEntity, ButtonEntity):
         self._attr_unique_id = f"ghostfolio_clear_watchlist_{limit_type}_limits_{config_entry.entry_id}"
         self._attr_translation_key = f"clear_watchlist_{limit_type}_limits"
         self._attr_icon = "mdi:eye-off-outline"
-
-        portfolio_name = config_entry.data.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"ghostfolio_portfolio_{config_entry.entry_id}")},
-            "name": f"{portfolio_name} Portfolio",
-            "manufacturer": "Ghostfolio",
-            "model": "Portfolio Tracker",
-        }
+        self._attr_device_info = portfolio_device_info(config_entry)
 
     async def async_press(self) -> None:
         """Disable all watchlist limit entities of this type in the entity registry."""

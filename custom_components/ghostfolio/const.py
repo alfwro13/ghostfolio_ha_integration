@@ -31,6 +31,18 @@ YAHOO_CRUMB_URL = "https://query1.finance.yahoo.com/v1/test/getcrumb"
 YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
 YAHOO_QUOTE_SUMMARY_URL = "https://query2.finance.yahoo.com/v10/finance/quoteSummary"
 
+def portfolio_device_info(config_entry) -> dict:
+    """Return the shared device_info dict for the top-level portfolio device."""
+    from homeassistant.config_entries import ConfigEntry  # local import avoids circular dep
+    name = config_entry.data.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
+    return {
+        "identifiers": {(DOMAIN, f"ghostfolio_portfolio_{config_entry.entry_id}")},
+        "name": f"{name} Portfolio",
+        "manufacturer": "Ghostfolio",
+        "model": "Portfolio Tracker",
+    }
+
+
 # Event fired when a price limit is crossed
 EVENT_LIMIT_ALERT = "ghostfolio_limit_alert"
 

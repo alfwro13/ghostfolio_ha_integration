@@ -30,6 +30,7 @@ from .const import (
     WATCHLIST_SCOPE,
     LYNCH_PEG_UNDERVALUED,
     LYNCH_PEG_OVERPRICED,
+    portfolio_device_info,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -166,14 +167,7 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.config_entry = config_entry
         self.portfolio_name = config_entry.data.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
-        device_id = f"ghostfolio_portfolio_{config_entry.entry_id}"
-        
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, device_id)},
-            "name": f"{self.portfolio_name} Portfolio",
-            "manufacturer": "Ghostfolio",
-            "model": "Portfolio Tracker",
-        }
+        self._attr_device_info = portfolio_device_info(config_entry)
 
     @property
     def native_unit_of_measurement(self) -> str | None:

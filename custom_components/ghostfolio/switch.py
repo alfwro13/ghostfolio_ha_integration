@@ -9,7 +9,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.const import EntityCategory
 
 from . import GhostfolioDataUpdateCoordinator
-from .const import DOMAIN, CONF_PORTFOLIO_NAME
+from .const import DOMAIN, portfolio_device_info
 
 
 async def async_setup_entry(
@@ -34,15 +34,8 @@ class GhostfolioPauseSyncSwitch(CoordinatorEntity, SwitchEntity):
     def __init__(self, coordinator: GhostfolioDataUpdateCoordinator, config_entry: ConfigEntry):
         """Initialize the switch."""
         super().__init__(coordinator)
-        self.portfolio_name = config_entry.data.get(CONF_PORTFOLIO_NAME, "Ghostfolio")
         self._attr_unique_id = f"ghostfolio_pause_sync_{config_entry.entry_id}"
-        
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"ghostfolio_portfolio_{config_entry.entry_id}")},
-            "name": f"{self.portfolio_name} Portfolio",
-            "manufacturer": "Ghostfolio",
-            "model": "Portfolio Tracker",
-        }
+        self._attr_device_info = portfolio_device_info(config_entry)
 
     @property
     def is_on(self) -> bool:
