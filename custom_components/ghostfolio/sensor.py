@@ -1254,6 +1254,8 @@ class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
     @property
     def extra_state_attributes(self) -> dict | None:
         """Return the deep fundamental metrics."""
+        if not self.coordinator.data:
+            return None
         data_cache = self.coordinator.data.get("fundamentals_data", {})
         data = data_cache.get(self.symbol, {})
         last_update = self.coordinator.last_fundamentals_update
