@@ -62,6 +62,8 @@ async def async_setup_entry(
 
                 for holding in holdings_list:
                     if float(holding.get("quantity") or 0) > 0:
+                        if holding.get("assetClass") == "LIQUIDITY":
+                            continue
                         symbol = holding.get("symbol")
                         
                         # Create Low and High limit entities
