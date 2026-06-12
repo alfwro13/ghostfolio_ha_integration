@@ -34,8 +34,9 @@ class GhostfolioAPI:
         url = f"{self.base_url}/api/v1/auth/anonymous"
         payload = {"accessToken": self.access_token}
 
+        ssl_context = False if not self.verify_ssl else None
         try:
-            async with self._get_session().post(url, json=payload) as response:
+            async with self._get_session().post(url, json=payload, ssl=ssl_context) as response:
                 if response.status in [200, 201]:
                     try:
                         data = await response.json()
@@ -106,9 +107,10 @@ class GhostfolioAPI:
             await self.authenticate()
             
         headers = {"Authorization": f"Bearer {self.auth_token}"}
-        
+        ssl_context = False if not self.verify_ssl else None
+
         try:
-            async with self._get_session().get(url, headers=headers) as response:
+            async with self._get_session().get(url, headers=headers, ssl=ssl_context) as response:
                 return {
                     "code": provider_code,
                     "status_code": response.status,
@@ -128,10 +130,11 @@ class GhostfolioAPI:
             await self.authenticate()
 
         headers = {"Authorization": f"Bearer {self.auth_token}"}
+        ssl_context = False if not self.verify_ssl else None
 
         for attempt in range(3):
             try:
-                async with self._get_session().get(url, params=params, headers=headers) as response:
+                async with self._get_session().get(url, params=params, headers=headers, ssl=ssl_context) as response:
                     if response.status == 200:
                         try:
                             return await response.json()
@@ -144,7 +147,7 @@ class GhostfolioAPI:
                             raise GhostfolioAPIError("Re-authentication did not return a valid token")
                         headers = {"Authorization": f"Bearer {self.auth_token}"}
 
-                        async with self._get_session().get(url, params=params, headers=headers) as retry_response:
+                        async with self._get_session().get(url, params=params, headers=headers, ssl=ssl_context) as retry_response:
                             if retry_response.status == 200:
                                 try:
                                     return await retry_response.json()
@@ -167,10 +170,7 @@ class GhostfolioAPI:
         """Get or create aiohttp session."""
         if self._session is None or self._session.closed:
             timeout = aiohttp.ClientTimeout(total=30)
-            connector = None
-            if not self.verify_ssl:
-                connector = aiohttp.TCPConnector(ssl=False)
-            self._session = aiohttp.ClientSession(timeout=timeout, connector=connector)
+            self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
 
     async def close(self) -> None:
