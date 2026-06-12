@@ -28,30 +28,36 @@ class GhostfolioAPI:
         self.verify_ssl = verify_ssl
         self.auth_token: str | None = None
         self._session: aiohttp.ClientSession | None = None
+        self._auth_lock = asyncio.Lock()
 
     async def authenticate(self) -> str | None:
         """Authenticate with Ghostfolio and get auth token."""
-        url = f"{self.base_url}/api/v1/auth/anonymous"
-        payload = {"accessToken": self.access_token}
+        async with self._auth_lock:
+            # Re-check inside the lock: another coroutine may have already refreshed
+            if self.auth_token:
+                return self.auth_token
 
-        ssl_context = False if not self.verify_ssl else None
-        try:
-            async with self._get_session().post(url, json=payload, ssl=ssl_context) as response:
-                if response.status in [200, 201]:
-                    try:
-                        data = await response.json()
-                    except ValueError as err:
-                        raise GhostfolioAPIError("Invalid JSON in authentication response") from err
-                    self.auth_token = data.get("authToken")
-                    return self.auth_token
-                else:
-                    _LOGGER.error("Authentication failed with status %s", response.status)
-                    response_text = await response.text()
-                    _LOGGER.debug("Response: %s", response_text)
-                    raise GhostfolioAuthError(f"Authentication failed: {response.status}")
-        except aiohttp.ClientError as err:
-            _LOGGER.error("HTTP error during authentication: %s", err)
-            raise GhostfolioAPIError(f"Connection error: {err}") from err
+            url = f"{self.base_url}/api/v1/auth/anonymous"
+            payload = {"accessToken": self.access_token}
+
+            ssl_context = False if not self.verify_ssl else None
+            try:
+                async with self._get_session().post(url, json=payload, ssl=ssl_context) as response:
+                    if response.status in [200, 201]:
+                        try:
+                            data = await response.json()
+                        except ValueError as err:
+                            raise GhostfolioAPIError("Invalid JSON in authentication response") from err
+                        self.auth_token = data.get("authToken")
+                        return self.auth_token
+                    else:
+                        _LOGGER.error("Authentication failed with status %s", response.status)
+                        response_text = await response.text()
+                        _LOGGER.debug("Response: %s", response_text)
+                        raise GhostfolioAuthError(f"Authentication failed: {response.status}")
+            except aiohttp.ClientError as err:
+                _LOGGER.error("HTTP error during authentication: %s", err)
+                raise GhostfolioAPIError(f"Connection error: {err}") from err
 
     async def get_portfolio_performance(self, range_param: str = "max", account_id: str | None = None) -> dict[str, Any]:
         """Get portfolio performance data, optionally filtered by account."""
@@ -142,6 +148,7 @@ class GhostfolioAPI:
                             raise GhostfolioAPIError(f"Invalid JSON response from {url}") from err
                     elif response.status == 401:
                         _LOGGER.info("Token expired, re-authenticating...")
+                        self.auth_token = None
                         await self.authenticate()
                         if not self.auth_token:
                             raise GhostfolioAPIError("Re-authentication did not return a valid token")
