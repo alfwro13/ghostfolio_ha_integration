@@ -324,13 +324,31 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         return results
 
     async def async_fetch_24h_change(self):
-        """Manually fetch previous close using sequential API calls."""
+        """Fetch previous close for all Yahoo tickers using the v7 bulk endpoint."""
         _LOGGER.info("Manually fetching 24h Change (Previous Close) from Yahoo")
+        tickers = self._get_active_yahoo_symbols()
+        if not tickers:
+            return
+        session = self.api._get_session()
+        crumb = await self._get_yahoo_crumb(session)
+        params = {"symbols": ",".join(tickers)}
+        if crumb:
+            params["crumb"] = crumb
         try:
-            for ticker, data in (await self._yahoo_quote_summary_fetch_all("price", "24h change")).items():
-                prev_close = data.get("price", {}).get("regularMarketPreviousClose", {}).get("raw")
-                if prev_close is not None:
-                    self.previous_close_cache[ticker] = prev_close
+            headers = {"User-Agent": YAHOO_USER_AGENT}
+            async with session.get(YAHOO_QUOTE_URL, params=params, headers=headers) as response:
+                if response.status == 401:
+                    self._yahoo_crumb = None
+                    _LOGGER.debug("Yahoo crumb expired during 24h change fetch, will re-fetch on next cycle")
+                    return
+                if response.status == 200:
+                    resp_json = await response.json()
+                    results = resp_json.get("quoteResponse", {}).get("result", [])
+                    for res in results:
+                        sym = res.get("symbol")
+                        prev_close = res.get("regularMarketPreviousClose")
+                        if sym and prev_close is not None:
+                            self.previous_close_cache[sym] = float(prev_close)
             self.last_previous_close_update = dt_util.utcnow()
             await self._save_cache()
         except Exception as e:
