@@ -77,6 +77,8 @@ class GhostfolioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 except Exception as ex:
                     _LOGGER.exception("Unexpected exception: %s", ex)
                     errors["base"] = "cannot_connect"
+                finally:
+                    await api.close()
 
         return self.async_show_form(
             step_id="user",
@@ -153,6 +155,8 @@ class GhostfolioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 except Exception as ex:
                     _LOGGER.exception("Unexpected exception during reconfiguration: %s", ex)
                     errors["base"] = "cannot_connect"
+                finally:
+                    await api.close()
 
         current_data = config_entry.data
         return self.async_show_form(
