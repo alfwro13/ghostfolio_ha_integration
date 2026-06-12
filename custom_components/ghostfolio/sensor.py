@@ -1182,8 +1182,9 @@ def _calculate_lynch_peg(data):
 
 class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
     """Sensor tracking Yahoo Finance Fundamental Enrichment Data."""
-    
+
     _attr_icon = "mdi:finance"
+    _unrecorded_attributes = frozenset({"detailed_stats"})
     
     @property
     def native_unit_of_measurement(self) -> str | None: 
@@ -1262,14 +1263,12 @@ class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
         stats = _extract_yahoo_raw(data.get("defaultKeyStatistics", {}))
         fin = _extract_yahoo_raw(data.get("financialData", {}))
         summary = _extract_yahoo_raw(data.get("summaryDetail", {}))
-        
+
         if is_gbp:
             for key in ["forwardPE", "trailingPE", "priceToBook"]:
                 if key in stats and stats[key] is not None:
                     stats[key] = round(stats[key] / 100.0, 4)
-        
-        attrs.update(stats)
-        attrs.update(summary) 
-        attrs.update(fin)
-        
-        return {k: v for k, v in attrs.items() if not isinstance(v, (dict, list))}
+
+        attrs["detailed_stats"] = {k: v for k, v in {**stats, **summary, **fin}.items() if not isinstance(v, (dict, list))}
+
+        return attrs
