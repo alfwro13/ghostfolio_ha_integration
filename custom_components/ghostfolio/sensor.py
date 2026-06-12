@@ -205,25 +205,25 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
         info = providers.get(data_source)
         return info and not info.get("is_active", True)
 
+    def _holdings_healthy(self, holdings: list) -> bool:
+        """Return False if any active non-LIQUIDITY holding has a bad price or offline provider."""
+        for h in holdings:
+            if float(h.get("quantity") or 0) > 0 and h.get("assetClass") != "LIQUIDITY":
+                if self._is_provider_down(h.get("dataSource")):
+                    return False
+                val = float(h.get("valueInBaseCurrency") or h.get("value") or 0)
+                price = float(h.get("marketPrice") or 0)
+                if val <= 0 or price <= 0:
+                    return False
+        return True
+
     @property
     def is_portfolio_healthy(self) -> bool:
         """Check if all assets in the portfolio are returning valid data."""
-        if not self.coordinator.data: 
+        if not self.coordinator.data:
             return True
-            
         all_holdings = self.coordinator.data.get("account_holdings", {})
-        for holdings in all_holdings.values():
-            for h in holdings:
-                if float(h.get("quantity") or 0) > 0 and h.get("assetClass") != "LIQUIDITY":
-                    if self._is_provider_down(h.get("dataSource")): 
-                        return False
-                     
-                    val = float(h.get("valueInBaseCurrency") or h.get("value") or 0)
-                    price = float(h.get("marketPrice") or 0)
-                    if val <= 0 or price <= 0: 
-                        return False
-                     
-        return True
+        return all(self._holdings_healthy(h) for h in all_holdings.values())
 
     def _calculate_unrealized_pnl(self, target_account_id: str | None = None) -> tuple[float, float]:
         """Helper to safely calculate true unrealized P&L strictly from active equities."""
@@ -551,22 +551,10 @@ class GhostfolioAccountBaseSensor(GhostfolioBaseSensor):
     @property
     def is_account_healthy(self) -> bool:
         """Ensure no assets within this specific account are offline."""
-        if not self.coordinator.data: 
+        if not self.coordinator.data:
             return True
-            
         all_holdings = self.coordinator.data.get("account_holdings", {})
-        account_holdings = all_holdings.get(self.account_id, [])
-        for h in account_holdings:
-            if float(h.get("quantity") or 0) > 0 and h.get("assetClass") != "LIQUIDITY":
-                if self._is_provider_down(h.get("dataSource")): 
-                    return False
-                 
-                val = float(h.get("valueInBaseCurrency") or h.get("value") or 0)
-                price = float(h.get("marketPrice") or 0)
-                if val <= 0 or price <= 0: 
-                    return False
-                 
-        return True
+        return self._holdings_healthy(all_holdings.get(self.account_id, []))
 
 
 class GhostfolioAccountValueSensor(GhostfolioAccountBaseSensor):
