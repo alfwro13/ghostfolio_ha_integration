@@ -5,6 +5,8 @@ import logging
 import asyncio
 from datetime import timedelta
 
+import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -61,9 +63,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: GhostfolioConfigEntry) -
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # --- Register Custom Services for Manual Fetches ---
+    _service_schema = vol.Schema({vol.Optional("config_entry_id"): str}, extra=vol.ALLOW_EXTRA)
+
     def _make_service_handler(method_name: str, label: str):
-        async def _handler(_):
+        async def _handler(call):
+            target_id = call.data.get("config_entry_id")
             for e in hass.config_entries.async_entries(DOMAIN):
+                if target_id and e.entry_id != target_id:
+                    continue
                 coord = e.runtime_data
                 if isinstance(coord, GhostfolioDataUpdateCoordinator):
                     try:
@@ -79,7 +86,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GhostfolioConfigEntry) -
         (SERVICE_FETCH_PREMARKET,      "async_fetch_premarket",    "fetch premarket data"),
     ]:
         if not hass.services.has_service(DOMAIN, service_name):
-            hass.services.async_register(DOMAIN, service_name, _make_service_handler(method, label))
+            hass.services.async_register(DOMAIN, service_name, _make_service_handler(method, label), schema=_service_schema)
 
     return True
 

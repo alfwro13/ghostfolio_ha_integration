@@ -1,11 +1,35 @@
 refresh_fundamentals:
   name: "Refresh Fundamentals"
   description: "Pulls deep fundamental metrics (PEG, Margins, Cash Flow, etc.) from Yahoo Finance. Recommended to trigger via automation once a week."
+  fields:
+    config_entry_id:
+      name: "Config Entry ID"
+      description: "Optional. Limit the refresh to a specific portfolio entry. When omitted all Ghostfolio entries are refreshed."
+      required: false
+      example: "abc123def456"
+      selector:
+        text:
 
 fetch_24h_change:
   name: "Fetch 24h Change (Previous Close)"
   description: "Pulls the official Previous Close from Yahoo Finance to accurately calculate the 24h daily change, fixing timezone lag. Recommended to trigger via automation once a day at midnight or before market open."
+  fields:
+    config_entry_id:
+      name: "Config Entry ID"
+      description: "Optional. Limit the fetch to a specific portfolio entry. When omitted all Ghostfolio entries are updated."
+      required: false
+      example: "abc123def456"
+      selector:
+        text:
 
 fetch_premarket_data:
   name: "Fetch Pre-Market Data"
   description: "Pulls live Pre-Market and Post-Market prices for US stocks using a bulk API request. Recommended to trigger via automation every 1-5 minutes only during extended trading hours."
+  fields:
+    config_entry_id:
+      name: "Config Entry ID"
+      description: "Optional. Limit the fetch to a specific portfolio entry. When omitted all Ghostfolio entries are updated."
+      required: false
+      example: "abc123def456"
+      selector:
+        text:
