@@ -369,6 +369,29 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as e:
             _LOGGER.error("Failed fundamentals fetch process: %s", e)
 
+    @staticmethod
+    def _flatten_symbol_profile(item: dict) -> None:
+        """Promote symbolProfile fields to the top level of *item* (mutates in place).
+
+        Ghostfolio 3.7.0 moved symbol/currency/assetClass etc. into a nested
+        symbolProfile sub-object.  We handle three fallback spellings plus a
+        deep-scan for any nested dict that carries a 'symbol' key.
+        """
+        sp = (
+            item.get("symbolProfile")
+            or item.get("SymbolProfile")
+            or item.get("assetProfile")
+        )
+        if not sp:
+            for val in item.values():
+                if isinstance(val, dict) and "symbol" in val:
+                    sp = val
+                    break
+        if isinstance(sp, dict):
+            for attr in ["symbol", "dataSource", "currency", "assetClass", "name", "assetSubClass"]:
+                if not item.get(attr) and sp.get(attr):
+                    item[attr] = sp[attr]
+
     async def _enrich_item_with_market_data(self, item: dict) -> dict:
         """Enrich an asset or watchlist item."""
         symbol = item.get("symbol")
@@ -600,23 +623,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
             for account_id, raw_holdings in raw_account_holdings.items():
                 enriched_holdings = []
                 for h in raw_holdings:
-                    # --- FIX FOR GHOSTFOLIO 3.7.0 ---
-                    # 1. Look for standard profile names
-                    sp = h.get("symbolProfile") or h.get("SymbolProfile") or h.get("assetProfile")
-                    
-                    # 2. If not found, deep-scan the holding for any nested dictionary containing 'symbol'
-                    if not sp:
-                        for val in h.values():
-                            if isinstance(val, dict) and "symbol" in val:
-                                sp = val
-                                break
-                    
-                    # 3. Safely map the missing fields back to the top level
-                    if isinstance(sp, dict):
-                        for attr in ["symbol", "dataSource", "currency", "assetClass", "name", "assetSubClass"]:
-                            if not h.get(attr) and sp.get(attr):
-                                h[attr] = sp.get(attr)
-                    # --------------------------------
+                    self._flatten_symbol_profile(h)
 
                     if float(h.get("quantity") or 0) > 0:
                         if h.get("assetClass") == "LIQUIDITY":
@@ -627,12 +634,7 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
 
             watchlist_items = []
             for w in raw_watchlist_items:
-                # --- FIX FOR GHOSTFOLIO 3.7.0 ---
-                sp = w.get("symbolProfile") or w.get("SymbolProfile") or {}
-                for attr in ["symbol", "dataSource", "currency", "assetClass", "name", "assetSubClass"]:
-                    if not w.get(attr) and sp.get(attr):
-                        w[attr] = sp.get(attr)
-                # --------------------------------
+                self._flatten_symbol_profile(w)
                 watchlist_items.append(await self._enrich_item_with_market_data(w))
 
             data["server_online"] = True
