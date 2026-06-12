@@ -151,15 +151,18 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         """Fetch Yahoo Finance crumb to bypass API restrictions."""
         if self._yahoo_crumb:
             return self._yahoo_crumb
-            
+
         headers = {"User-Agent": YAHOO_USER_AGENT}
         try:
             async with session.get(YAHOO_SESSION_URL, headers=headers, allow_redirects=True) as resp:
                 pass
             async with session.get(YAHOO_CRUMB_URL, headers=headers) as resp:
                 if resp.status == 200:
-                    self._yahoo_crumb = await resp.text()
-                    return self._yahoo_crumb
+                    text = (await resp.text()).strip()
+                    # A valid crumb is short plain-text; reject HTML error pages
+                    if text and "<" not in text and len(text) < 64:
+                        self._yahoo_crumb = text
+                        return self._yahoo_crumb
         except Exception as e:
             _LOGGER.debug("Yahoo crumb fetch failed: %s", e)
         return None
@@ -222,13 +225,17 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
 
     async def _async_check_us_market_state(self, session, crumb) -> bool | None:
         """Check if US market is open using SPY as a universal proxy."""
-        url = f"{YAHOO_QUOTE_URL}?symbols=SPY"
+        params = {"symbols": "SPY"}
         if crumb:
-            url += f"&crumb={crumb}"
-            
+            params["crumb"] = crumb
+
         headers = {"User-Agent": YAHOO_USER_AGENT}
         try:
-            async with session.get(url, headers=headers) as response:
+            async with session.get(YAHOO_QUOTE_URL, params=params, headers=headers) as response:
+                if response.status == 401:
+                    self._yahoo_crumb = None
+                    _LOGGER.debug("Yahoo crumb expired, will re-fetch on next cycle")
+                    return None
                 if response.status == 200:
                     data = await response.json()
                     res = data.get("quoteResponse", {}).get("result", [])
@@ -260,16 +267,18 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
         tickers = self._get_active_yahoo_symbols(us_only=True)
         if not tickers:
             return
-            
-        symbol_string = ",".join(tickers)
-        url = f"{YAHOO_QUOTE_URL}?symbols={symbol_string}"
-        
+
+        params = {"symbols": ",".join(tickers)}
+        if crumb:
+            params["crumb"] = crumb
+
         try:
-            if crumb:
-                url += f"&crumb={crumb}"
-                
             headers = {"User-Agent": YAHOO_USER_AGENT}
-            async with session.get(url, headers=headers) as response:
+            async with session.get(YAHOO_QUOTE_URL, params=params, headers=headers) as response:
+                if response.status == 401:
+                    self._yahoo_crumb = None
+                    _LOGGER.debug("Yahoo crumb expired during premarket fetch, will re-fetch on next cycle")
+                    return
                 if response.status == 200:
                     resp_json = await response.json()
                     results = resp_json.get("quoteResponse", {}).get("result", [])
@@ -277,12 +286,12 @@ class GhostfolioDataUpdateCoordinator(DataUpdateCoordinator):
                         sym = res.get("symbol")
                         state = res.get("marketState", "")
                         price = None
-                        
+
                         if "PRE" in state:
                             price = res.get("preMarketPrice")
                         elif "POST" in state or state == "CLOSED":
                             price = res.get("postMarketPrice") or res.get("regularMarketPrice")
-                            
+
                         if price is not None and sym:
                             self.premarket_cache[sym] = float(price)
         except Exception as e:
