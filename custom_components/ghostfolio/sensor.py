@@ -902,7 +902,7 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         num_unique_id = f"ghostfolio_limit_{limit_type}_{self.account_id}_{safe_symbol}_{entry_id}"
         entity_id = registry.async_get_entity_id("number", DOMAIN, num_unique_id)
         
-        limit_display = False 
+        limit_display = None
         is_reached = False
         limit_val = 0.0
         
@@ -1094,7 +1094,7 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
         num_unique_id = f"ghostfolio_watchlist_limit_{limit_type}_{safe_symbol}_{entry_id}"
         entity_id = registry.async_get_entity_id("number", DOMAIN, num_unique_id)
         
-        limit_display = False 
+        limit_display = None
         is_reached = False
         limit_val = 0.0
         
