@@ -171,8 +171,10 @@ class GhostfolioBaseSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_unit_of_measurement(self) -> str | None:
-        """Determine the base currency dynamically."""
-        if not self.coordinator.data: 
+        """Determine the unit: honour _attr_native_unit_of_measurement if set, else derive currency."""
+        if self._attr_native_unit_of_measurement is not None:
+            return self._attr_native_unit_of_measurement
+        if not self.coordinator.data:
             return "EUR"
             
         payload = self.coordinator.data.get("accounts", {})
@@ -348,11 +350,6 @@ class GhostfolioTimeWeightedReturnSensor(GhostfolioBaseSensor):
         self._attr_unique_id = f"ghostfolio_net_performance_percent_{config_entry.entry_id}"
 
     @property
-    def native_unit_of_measurement(self) -> str | None:
-        """Force percentage as the unit."""
-        return PERCENTAGE
-
-    @property
     def native_value(self) -> float | None:
         """Return the calculated TWR percentage."""
         if not self.is_portfolio_healthy: 
@@ -394,11 +391,6 @@ class GhostfolioTimeWeightedReturnFXSensor(GhostfolioBaseSensor):
         """Initialize the global FX TWR sensor."""
         super().__init__(coordinator, config_entry)
         self._attr_unique_id = f"ghostfolio_net_performance_percent_with_currency_{config_entry.entry_id}"
-
-    @property
-    def native_unit_of_measurement(self) -> str | None:
-        """Force percentage as the unit."""
-        return PERCENTAGE
 
     @property
     def native_value(self) -> float | None:
@@ -444,11 +436,6 @@ class GhostfolioSimpleGainPercentSensor(GhostfolioBaseSensor):
         self._attr_unique_id = f"ghostfolio_simple_gain_percent_{config_entry.entry_id}"
 
     @property
-    def native_unit_of_measurement(self) -> str | None:
-        """Force percentage as the unit."""
-        return PERCENTAGE
-
-    @property
     def native_value(self) -> float | None:
         """Calculate Simple Gain % based on Native Gain logic."""
         if not self.is_portfolio_healthy: 
@@ -472,11 +459,6 @@ class GhostfolioUnrealizedPnLPercentSensor(GhostfolioBaseSensor):
         """Initialize the global unrealized return sensor."""
         super().__init__(coordinator, config_entry)
         self._attr_unique_id = f"ghostfolio_unrealized_pnl_percent_{config_entry.entry_id}"
-
-    @property
-    def native_unit_of_measurement(self) -> str | None:
-        """Force percentage as the unit."""
-        return PERCENTAGE
 
     @property
     def native_value(self) -> float | None:
@@ -677,11 +659,6 @@ class GhostfolioAccountTWRSensor(GhostfolioAccountBaseSensor):
         self._attr_name = f"{self.account_name} Time-Weighted Return %"
 
     @property
-    def native_unit_of_measurement(self) -> str | None:
-        """Force percentage as the unit."""
-        return PERCENTAGE
-
-    @property
     def native_value(self) -> float | None:
         """Return the TWR % for the account."""
         if not self.is_account_healthy: 
@@ -702,11 +679,6 @@ class GhostfolioAccountSimpleGainSensor(GhostfolioAccountBaseSensor):
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_simple_gain_{self.account_id}_{config_entry.entry_id}"
         self._attr_name = f"{self.account_name} Simple Gain %"
-
-    @property
-    def native_unit_of_measurement(self) -> str | None:
-        """Force percentage as the unit."""
-        return PERCENTAGE
 
     @property
     def native_value(self) -> float | None:
@@ -732,11 +704,6 @@ class GhostfolioAccountUnrealizedPnLPercentSensor(GhostfolioAccountBaseSensor):
         super().__init__(coordinator, config_entry, account_data)
         self._attr_unique_id = f"ghostfolio_account_unrealized_pnl_percent_{self.account_id}_{config_entry.entry_id}"
         self._attr_name = f"{self.account_name} Unrealized Gain %"
-
-    @property
-    def native_unit_of_measurement(self) -> str | None:
-        """Force percentage as the unit."""
-        return PERCENTAGE
 
     @property
     def native_value(self) -> float | None:
