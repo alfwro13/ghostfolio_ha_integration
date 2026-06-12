@@ -1167,17 +1167,21 @@ def _extract_yahoo_raw(data):
             
     return out
 
+def _get_forward_pe(data: dict) -> float | None:
+    """Return forward P/E from Yahoo quoteSummary data, GBp-adjusted."""
+    currency = data.get("summaryDetail", {}).get("currency") or data.get("financialData", {}).get("currency")
+    fwd_pe = data.get("summaryDetail", {}).get("forwardPE", {}).get("raw")
+    if fwd_pe is None:
+        fwd_pe = data.get("defaultKeyStatistics", {}).get("forwardPE", {}).get("raw")
+        if currency == "GBp" and fwd_pe is not None:
+            fwd_pe = fwd_pe / 100.0
+    return fwd_pe
+
+
 def _calculate_lynch_peg(data):
     """Calculate the Lynch PEG Ratio using 1y forward growth and dividend yield."""
     try:
-        currency = data.get("summaryDetail", {}).get("currency") or data.get("financialData", {}).get("currency")
-        is_gbp = (currency == "GBp")
-        
-        fwd_pe = data.get("summaryDetail", {}).get("forwardPE", {}).get("raw")
-        if fwd_pe is None:
-            fwd_pe = data.get("defaultKeyStatistics", {}).get("forwardPE", {}).get("raw")
-            if is_gbp and fwd_pe is not None:
-                fwd_pe = fwd_pe / 100.0
+        fwd_pe = _get_forward_pe(data)
                 
         div_yield = data.get("summaryDetail", {}).get("dividendYield", {}).get("raw") or 0
         
@@ -1264,12 +1268,7 @@ class GhostfolioFundamentalsSensor(GhostfolioBaseSensor):
             
         attrs["standard_peg_ratio"] = data.get("defaultKeyStatistics", {}).get("pegRatio", {}).get("raw")
         
-        fwd_pe = data.get("summaryDetail", {}).get("forwardPE", {}).get("raw")
-        if fwd_pe is None:
-            fwd_pe = data.get("defaultKeyStatistics", {}).get("forwardPE", {}).get("raw")
-            if is_gbp and fwd_pe is not None:
-                fwd_pe = fwd_pe / 100.0
-                
+        fwd_pe = _get_forward_pe(data)
         if fwd_pe is not None:
             attrs["forward_pe"] = round(fwd_pe, 4)
         
