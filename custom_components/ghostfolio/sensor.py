@@ -828,7 +828,89 @@ class GhostfolioAccountCashBalanceSensor(GhostfolioAccountBaseSensor):
 # PER-HOLDING SENSORS
 # ==========================================
 
-class GhostfolioHoldingSensor(GhostfolioBaseSensor):
+class LimitAlertMixin:
+    """Shared price-limit checking and event-firing logic for holding and watchlist sensors."""
+
+    _prev_low_reached: bool = False
+    _prev_high_reached: bool = False
+
+    def _limit_number_unique_id(self, limit_type: str) -> str:
+        raise NotImplementedError
+
+    @property
+    def _limit_account_label(self) -> str:
+        raise NotImplementedError
+
+    def _limit_current_price_and_currency(self) -> tuple[float, str | None]:
+        raise NotImplementedError
+
+    def _get_limit_state(self, limit_type: str, current_value: float, compare_op):
+        """Return (limit_display, is_reached, limit_val) for a given limit type."""
+        registry = er.async_get(self.hass)
+        num_unique_id = self._limit_number_unique_id(limit_type)
+        entity_id = registry.async_get_entity_id("number", DOMAIN, num_unique_id)
+
+        limit_display = None
+        is_reached = False
+        limit_val = 0.0
+
+        if entity_id:
+            state_obj = self.hass.states.get(entity_id)
+            if state_obj and state_obj.state not in [None, "unknown", "unavailable"]:
+                try:
+                    limit_val = float(state_obj.state)
+                    if limit_val > 0:
+                        limit_display = limit_val
+                        if current_value > 0:
+                            if compare_op(current_value, limit_val):
+                                is_reached = True
+                except ValueError:
+                    pass
+
+        return limit_display, is_reached, limit_val
+
+    def _check_and_fire_events(self):
+        """Check price limits and fire HA events on threshold crossings."""
+        current_price, currency = self._limit_current_price_and_currency()
+        if not current_price:
+            return
+
+        low_disp, low_reached, low_val = self._get_limit_state("low", current_price, lambda val, limit: val <= limit)
+        if low_reached and not self._prev_low_reached:
+            self.hass.bus.async_fire(EVENT_LIMIT_ALERT, {
+                "ticker": self.symbol,
+                "account": self._limit_account_label,
+                "limit_type": "low",
+                "limit_value": low_val,
+                "current_value": current_price,
+                "currency": currency,
+            })
+        self._prev_low_reached = low_reached
+
+        high_disp, high_reached, high_val = self._get_limit_state("high", current_price, lambda val, limit: val >= limit)
+        if high_reached and not self._prev_high_reached:
+            self.hass.bus.async_fire(EVENT_LIMIT_ALERT, {
+                "ticker": self.symbol,
+                "account": self._limit_account_label,
+                "limit_type": "high",
+                "limit_value": high_val,
+                "current_value": current_price,
+                "currency": currency,
+            })
+        self._prev_high_reached = high_reached
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle data updates."""
+        self._check_and_fire_events()
+        super()._handle_coordinator_update()
+
+    async def async_update(self) -> None:
+        """Handle manual data updates."""
+        self._check_and_fire_events()
+
+
+class GhostfolioHoldingSensor(LimitAlertMixin, GhostfolioBaseSensor):
     """Sensor representing an individual holding."""
 
     _attr_device_class = SensorDeviceClass.MONETARY
@@ -854,18 +936,19 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
             "model": "Account Portfolio",
             "via_device": (DOMAIN, f"ghostfolio_portfolio_{config_entry.entry_id}"),
         }
-        self._prev_low_reached = False
-        self._prev_high_reached = False
+    def _limit_number_unique_id(self, limit_type: str) -> str:
+        safe_symbol = slugify(self.symbol) if self.symbol else "unknown"
+        return f"ghostfolio_limit_{limit_type}_{self.account_id}_{safe_symbol}_{self.config_entry.entry_id}"
 
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle data updates."""
-        self._check_and_fire_events()
-        super()._handle_coordinator_update()
+    @property
+    def _limit_account_label(self) -> str:
+        return self.account_name
 
-    async def async_update(self) -> None:
-        """Handle manual data updates."""
-        self._check_and_fire_events()
+    def _limit_current_price_and_currency(self) -> tuple[float, str | None]:
+        data = self.holding_data
+        if not data:
+            return 0.0, None
+        return float(data.get("marketPrice") or 0), data.get("currency")
 
     @property
     def holding_data(self) -> dict[str, Any] | None:
@@ -897,52 +980,6 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
             return None
             
         return float(val)
-
-    def _get_limit_state(self, limit_type: str, current_value: float, compare_op):
-        """Helper to get the current limit thresholds."""
-        registry = er.async_get(self.hass)
-        safe_symbol = slugify(self.symbol)
-        entry_id = self.config_entry.entry_id
-        num_unique_id = f"ghostfolio_limit_{limit_type}_{self.account_id}_{safe_symbol}_{entry_id}"
-        entity_id = registry.async_get_entity_id("number", DOMAIN, num_unique_id)
-        
-        limit_display = None
-        is_reached = False
-        limit_val = 0.0
-        
-        if entity_id:
-            state_obj = self.hass.states.get(entity_id)
-            if state_obj and state_obj.state not in [None, "unknown", "unavailable"]:
-                try:
-                    limit_val = float(state_obj.state)
-                    if limit_val > 0:
-                        limit_display = limit_val
-                        if current_value > 0: 
-                            if compare_op(current_value, limit_val): 
-                                is_reached = True
-                except ValueError:
-                    pass
-                    
-        return limit_display, is_reached, limit_val
-
-    def _check_and_fire_events(self):
-        """Check price limits and fire events if triggered."""
-        data = self.holding_data
-        if not data: 
-            return
-            
-        current_price = float(data.get("marketPrice") or 0)
-        currency_asset = data.get("currency")
-        
-        low_disp, low_reached, low_val = self._get_limit_state("low", current_price, lambda val, limit: val <= limit)
-        if low_reached and not self._prev_low_reached:
-            self.hass.bus.async_fire(EVENT_LIMIT_ALERT, {"ticker": self.symbol, "account": self.account_name, "limit_type": "low", "limit_value": low_val, "current_value": current_price, "currency": currency_asset})
-        self._prev_low_reached = low_reached
-
-        high_disp, high_reached, high_val = self._get_limit_state("high", current_price, lambda val, limit: val >= limit)
-        if high_reached and not self._prev_high_reached:
-            self.hass.bus.async_fire(EVENT_LIMIT_ALERT, {"ticker": self.symbol, "account": self.account_name, "limit_type": "high", "limit_value": high_val, "current_value": current_price, "currency": currency_asset})
-        self._prev_high_reached = high_reached
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
@@ -1012,7 +1049,7 @@ class GhostfolioHoldingSensor(GhostfolioBaseSensor):
         }
 
 
-class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
+class GhostfolioWatchlistSensor(LimitAlertMixin, GhostfolioBaseSensor):
     """Sensor tracking an item on the watchlist."""
 
     _attr_device_class = SensorDeviceClass.MONETARY
@@ -1036,18 +1073,21 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
             "model": "Account Portfolio",
             "via_device": (DOMAIN, f"ghostfolio_portfolio_{config_entry.entry_id}"),
         }
-        self._prev_low_reached = False
-        self._prev_high_reached = False
+    def _limit_number_unique_id(self, limit_type: str) -> str:
+        safe_symbol = slugify(self.symbol) if self.symbol else "unknown"
+        return f"ghostfolio_watchlist_limit_{limit_type}_{safe_symbol}_{self.config_entry.entry_id}"
 
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle data updates."""
-        self._check_and_fire_events()
-        super()._handle_coordinator_update()
+    @property
+    def _limit_account_label(self) -> str:
+        return "Watchlist"
 
-    async def async_update(self) -> None:
-        """Handle manual data updates."""
-        self._check_and_fire_events()
+    def _limit_current_price_and_currency(self) -> tuple[float, str | None]:
+        data = self.item_data
+        if not data:
+            return 0.0, None
+        is_gbp = (data.get("currency") == "GBp")
+        raw_price = data.get("marketPrice") or 0
+        return (float(raw_price) / 100 if is_gbp else float(raw_price)), ("GBP" if is_gbp else data.get("currency"))
 
     @property
     def item_data(self) -> dict[str, Any] | None:
@@ -1090,53 +1130,6 @@ class GhostfolioWatchlistSensor(GhostfolioBaseSensor):
             return "GBP"
         return data.get("currency")
 
-    def _get_limit_state(self, limit_type: str, current_value: float, compare_op):
-        """Helper to get the current limit thresholds."""
-        registry = er.async_get(self.hass)
-        safe_symbol = slugify(self.symbol)
-        entry_id = self.config_entry.entry_id
-        num_unique_id = f"ghostfolio_watchlist_limit_{limit_type}_{safe_symbol}_{entry_id}"
-        entity_id = registry.async_get_entity_id("number", DOMAIN, num_unique_id)
-        
-        limit_display = None
-        is_reached = False
-        limit_val = 0.0
-        
-        if entity_id:
-            state_obj = self.hass.states.get(entity_id)
-            if state_obj and state_obj.state not in [None, "unknown", "unavailable"]:
-                try:
-                    limit_val = float(state_obj.state)
-                    if limit_val > 0:
-                        limit_display = limit_val
-                        if current_value > 0: 
-                            if compare_op(current_value, limit_val): 
-                                is_reached = True
-                except ValueError:
-                    pass
-                    
-        return limit_display, is_reached, limit_val
-
-    def _check_and_fire_events(self):
-        """Check price limits and fire events if triggered."""
-        data = self.item_data
-        if not data: 
-            return
-            
-        is_gbp_conversion = (data.get("currency") == "GBp")
-        raw_price = data.get("marketPrice") or 0
-        current_price = (raw_price / 100) if is_gbp_conversion else raw_price
-        currency = "GBP" if is_gbp_conversion else data.get("currency")
-
-        low_disp, low_reached, low_val = self._get_limit_state("low", current_price, lambda val, limit: val <= limit)
-        if low_reached and not self._prev_low_reached:
-            self.hass.bus.async_fire(EVENT_LIMIT_ALERT, {"ticker": self.symbol, "account": "Watchlist", "limit_type": "low", "limit_value": low_val, "current_value": current_price, "currency": currency})
-        self._prev_low_reached = low_reached
-
-        high_disp, high_reached, high_val = self._get_limit_state("high", current_price, lambda val, limit: val >= limit)
-        if high_reached and not self._prev_high_reached:
-            self.hass.bus.async_fire(EVENT_LIMIT_ALERT, {"ticker": self.symbol, "account": "Watchlist", "limit_type": "high", "limit_value": high_val, "current_value": current_price, "currency": currency})
-        self._prev_high_reached = high_reached
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
