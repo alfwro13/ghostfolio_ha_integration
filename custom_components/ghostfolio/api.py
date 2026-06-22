@@ -104,7 +104,7 @@ class GhostfolioAPI:
     async def get_market_data(self, data_source: str, symbol: str) -> dict[str, Any]:
         """Get market data (price history and profile) for a specific symbol."""
         return await self._make_authenticated_request(
-            f"{self.base_url}/api/v1/market-data/{data_source}/{symbol}"
+            f"{self.base_url}/api/v1/asset-profiles/{data_source}/{symbol}"
         )
 
     async def get_provider_health(self, provider_code: str) -> dict[str, Any]:
